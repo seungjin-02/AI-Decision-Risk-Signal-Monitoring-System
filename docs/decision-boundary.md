@@ -6,22 +6,72 @@
 
 ## Principle
 
-* 시스템은 모든 상황에서 판단을 자동화하지 않는다.
+- 시스템은 모든 상황에서 판단을 자동화하지 않는다.
+- 자동화는 판단 가능성이 아니라 책임 가능성을 기준으로 제한한다.
 
-* 판단 가능성과 책임 범위를 기준으로 자동화를 제한한다.
+---
+## Core Definition
+
+Decision Boundary는 시스템이 감당할 수 있는 판단 책임의 범위를 정의하는 단계이다.
+
+- risk는 상황의 위험도이다
+- uncertainty는 판단의 신뢰도이다
+- boundary는 책임 허용 범위이다
+
+따라서 Decision Boundary는 risk나 uncertainty에 종속되지 않는다.
+
+## Boundary Decision Logic
+
+시스템은 다음 조건에서 판단을 중단한다
+
+### 1. 책임 불명확성
+
+- 현재 판단 결과에 대한 책임 주체를 명확히 정의할 수 없는 경우
+
+### 2. 근거 불충분
+
+- 자동 확정을 정당화할 수 있는 최소 근거가 보존되지 않는 경우
+
+### 3. 결론 불안정성
+
+- 입력 변화 또는 해석 차이에 따라 판단 결과가 쉽게 변하는 경우
+
+### 4. 설명 불가능성
+
+- 현재 구조로 판단 이유를 명시적으로 설명할 수 없는 경우
+
+위 조건 중 하나라도 충족되면 시스템은 판단을 계속하지 않고 중단한다.
 
 ---
 
-## Decision Flow
+## What Boundary is NOT
 
-* 낮은 위험 + 낮은 불확실성
-  → 자동 해석 가능
+> ### Risk 기반 경계
 
-* 높은 위험 + 낮은 불확실성
-  → escalation 가능
+```
+if level == CRITICAL:
+  human_required = True
+```
 
-* 높은 위험 + 높은 불확실성
-  → 자동 판단 중단 + human_required
+-> risk에 종속된 설계
+
+> ### Uncertainty 기반 경계
+
+```
+if uncertainty:
+  human_required = True
+```
+
+-> uncertainty에 종속된 설계
+
+> ### Score 기반 경계
+
+```
+if risk + uncertainty > threshold:
+  human_required = True
+```
+
+-> 의미 압축으로 인한 경계 붕괴
 
 ---
 
