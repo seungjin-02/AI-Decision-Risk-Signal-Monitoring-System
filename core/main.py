@@ -48,7 +48,7 @@ if __name__ == "__main__":
         decision_type = "approve",
         confidence = 0.9,
         latency_ms = 2800,
-        model_version = " ",
+        model_version = "v1",
         error_code= None,
     )
 
