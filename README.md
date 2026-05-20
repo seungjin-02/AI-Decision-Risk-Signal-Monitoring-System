@@ -1,4 +1,4 @@
-# AI Decision Risk Signal Monitoring System
+# AI Decision Risk Signal Monitoring System (MVP 진행중)
 
 AI 의사결정 과정에서 발생할 수 있는 **위험 신호(Risk Signal)** 와 **불확실성(Uncertainty)** 을 분리하고 시스템이 자동으로 판단을 확정해도 되는지 또는 인간 검토가 필요한지를 구조화하는 MVP 프로젝트입니다.
 
