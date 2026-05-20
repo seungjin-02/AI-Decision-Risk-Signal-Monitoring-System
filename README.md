@@ -322,8 +322,8 @@ pytest tests/invariants -v
 
 자세한 설계 설명은 아래 문서에서 확인할 수 있습니다.
 
+- [Architecture](docs/architecture.md)
 - [Decision Boundary](docs/decision-boundary.md)
-- [Design Decisions](docs/design-decisions.md)
 - [Validation Policy](docs/validation-policy.md)
 - [Test Strategy](docs/test-strategy.md)
 
