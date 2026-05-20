@@ -89,7 +89,7 @@ def _validate_latency_ms(
         issues.append(
             ValidationIssue(
                 field_name = "latency_ms",
-                message = "Latency ms must be a integer value",
+                message = "Latency ms must be an integer value",
                 value = event.latency_ms
             )
         )
