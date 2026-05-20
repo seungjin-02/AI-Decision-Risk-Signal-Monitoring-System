@@ -274,8 +274,8 @@ tests/
     test_design_invariants.py
 
 docs/
+  architecture.md
   decision-boundary.md
-  design-decisions.md
   validation-policy.md
   test-strategy.md
 ```
