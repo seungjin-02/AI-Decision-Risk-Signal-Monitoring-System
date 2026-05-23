@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Risk Signal Form E2E Practice</title>
+</head>
+<body>
+  <h1>Risk Signal Form</h1>
+
+  <div>
+    <label for="confidence">confidence</label>
+    <input id="confidence" name="confidence" type="text" />
+  </div>
+
+  <div>
+    <label for="latency_ms">latency_ms</label>
+    <input id="latency_ms" name="latency_ms" type="text" />
+  </div>
+
+  <div>
+    <label for="model_version">model_version</label>
+    <input id="model_version" name="model_version" type="text" />
+  </div>
+
+  <button id="evaluate-button">Evaluate</button>
+
+  <hr />
+
+  <div>
+    <strong>level:</strong>
+    <span data-testid="level">-</span>
+  </div>
+
+  <div>
+    <strong>risk_score:</strong>
+    <span data-testid="risk-score">-</span>
+  </div>
+
+  <div>
+    <strong>uncertainty_score:</strong>
+    <span data-testid="uncertainty-score">-</span>
+  </div>
+
+  <div>
+    <strong>human_required:</strong>
+    <span data-testid="human-required">-</span>
+  </div>
+
+  <script>
+    const confidenceInput = document.getElementById("confidence");
+    const latencyInput = document.getElementById("latency_ms");
+    const modelVersionInput = document.getElementById("model_version");
+    const evaluateButton = document.getElementById("evaluate-button");
+
+    const levelOutput = document.querySelector('[data-testid="level"]');
+    const riskScoreOutput = document.querySelector('[data-testid="risk-score"]');
+    const uncertaintyScoreOutput = document.querySelector('[data-testid="uncertainty-score"]');
+    const humanRequiredOutput = document.querySelector('[data-testid="human-required"]');
+
+    function evaluateRisk() {
+      const confidence = Number(confidenceInput.value);
+      const latencyMs = Number(latencyInput.value);
+      const modelVersion = modelVersionInput.value.trim();
+
+      let riskScore = 0;
+      let uncertaintyScore = 0;
+
+      if (!Number.isNaN(confidence) && confidence < 0.5) {
+        riskScore += 3;
+      }
+
+      if (!Number.isNaN(latencyMs) && latencyMs >= 2000) {
+        riskScore += 2;
+      }
+
+      if (modelVersion === "") {
+        uncertaintyScore += 1;
+      }
+
+      let level = "INFO";
+      let humanRequired = false;
+
+      if (riskScore >= 4 && uncertaintyScore === 0) {
+        level = "CRITICAL";
+        humanRequired = true;
+      } else if (riskScore >= 4 && uncertaintyScore >= 1) {
+        level = "WARN";
+        humanRequired = true;
+      } else if (riskScore >= 2) {
+        level = "WARN";
+        humanRequired = false;
+      }
+
+      levelOutput.textContent = level;
+      riskScoreOutput.textContent = String(riskScore);
+      uncertaintyScoreOutput.textContent = String(uncertaintyScore);
+      humanRequiredOutput.textContent = String(humanRequired);
+    }
+
+    evaluateButton.addEventListener("click", evaluateRisk);
+  </script>
+</body>
+</html>
