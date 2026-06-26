@@ -1,5 +1,5 @@
-from step05_SignalGeneration import Signal
-from step06_ScoreAggregation import aggregate_scores, derive_gate_inputs
+from core.step05_SignalGeneration import Signal
+from core.step06_ScoreAggregation import aggregate_scores, derive_gate_inputs
 
 def test_aggregate_risk_score():
     signals = [

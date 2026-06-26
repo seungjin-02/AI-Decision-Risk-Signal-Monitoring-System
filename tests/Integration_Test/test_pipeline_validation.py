@@ -1,7 +1,7 @@
 import pytest
 
-from step01_DecisionEvent import DecisionEvent
-from main import evaluate_event
+from core.step01_DecisionEvent import DecisionEvent
+from core.main import evaluate_event
 
 def test_pipeline_validation_error():
     event = DecisionEvent(

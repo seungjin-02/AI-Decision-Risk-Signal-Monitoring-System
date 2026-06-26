@@ -1,5 +1,5 @@
-from step01_DecisionEvent import DecisionEvent
-from step02_NormalizedEvent import normalize_event
+from core.step01_DecisionEvent import DecisionEvent
+from core.step02_NormalizedEvent import normalize_event
 
 
 def test_normalize_string_fields():

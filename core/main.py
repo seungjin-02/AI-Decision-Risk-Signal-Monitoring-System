@@ -1,16 +1,16 @@
 from dataclasses import asdict
 import json
 
-from event_validation import validate_event, format_validation_issues
-from step01_DecisionEvent import DecisionEvent
-from step02_NormalizedEvent import normalize_event
-from step03_EvaluationContext import build_evaluation_context
-from step04_RuleEvaluation import evaluate_rule
-from step05_SignalGeneration import build_signals
-from step06_ScoreAggregation import aggregate_scores, derive_gate_inputs
-from step07_GateInterpretation import interpret_gate
-from step08_ActionGeneration import generate_action
-from step09_AlertOutput import build_alert_output, AlertOutput
+from .event_validation import validate_event, format_validation_issues
+from .step01_DecisionEvent import DecisionEvent
+from .step02_NormalizedEvent import normalize_event
+from .step03_EvaluationContext import build_evaluation_context
+from .step04_RuleEvaluation import evaluate_rule
+from .step05_SignalGeneration import build_signals
+from .step06_ScoreAggregation import aggregate_scores, derive_gate_inputs
+from .step07_GateInterpretation import interpret_gate
+from .step08_ActionGeneration import generate_action
+from .step09_AlertOutput import build_alert_output, AlertOutput
 
 def evaluate_event(event: DecisionEvent) -> AlertOutput:
     validation = validate_event(event)
@@ -34,13 +34,7 @@ def evaluate_event(event: DecisionEvent) -> AlertOutput:
     )
 
 def print_alert(alert: AlertOutput) -> None:
-    print(
-        json.dumps(
-            asdict(alert),
-            indent = 2,
-            ensure_ascii = False,
-        )
-    )
+    print(json.dumps(asdict(alert), indent = 2, ensure_ascii = False))
 
 if __name__ == "__main__":
     event = DecisionEvent(
@@ -48,7 +42,7 @@ if __name__ == "__main__":
         decision_type = "approve",
         confidence = 0.9,
         latency_ms = 2800,
-        model_version = "v1",
+        model_version = " ",
         error_code= None,
     )
 

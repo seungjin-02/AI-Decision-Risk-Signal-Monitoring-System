@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from step05_SignalGeneration import Signal
+from .step05_SignalGeneration import Signal
 
 @dataclass(frozen=True)
 class ScoreSummary:

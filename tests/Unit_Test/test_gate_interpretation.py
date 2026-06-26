@@ -1,5 +1,5 @@
-from step06_ScoreAggregation import GateInputs
-from step07_GateInterpretation import interpret_gate, RiskLevel
+from core.step06_ScoreAggregation import GateInputs
+from core.step07_GateInterpretation import interpret_gate, RiskLevel
 
 def make_gate_inputs(
         risk_score: int,

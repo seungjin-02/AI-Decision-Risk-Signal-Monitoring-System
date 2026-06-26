@@ -1,5 +1,5 @@
-from step01_DecisionEvent import DecisionEvent
-from event_validation import validate_event, format_validation_issues, ValidationIssue
+from core.step01_DecisionEvent import DecisionEvent
+from core.event_validation import validate_event, format_validation_issues, ValidationIssue
 
 
 def get_issue_fields(result):

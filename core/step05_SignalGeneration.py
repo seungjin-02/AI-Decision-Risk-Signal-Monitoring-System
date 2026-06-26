@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from step02_NormalizedEvent import NormalizedEvent
-from step04_RuleEvaluation import RuleEvaluation
+from .step02_NormalizedEvent import NormalizedEvent
+from .step04_RuleEvaluation import RuleEvaluation
 
 @dataclass(frozen=True)
 class Signal:

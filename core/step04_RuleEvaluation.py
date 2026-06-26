@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from step02_NormalizedEvent import NormalizedEvent
-from step03_EvaluationContext import EvaluationContext
+from .step02_NormalizedEvent import NormalizedEvent
+from .step03_EvaluationContext import EvaluationContext
 
 RuleCondition = Callable[[NormalizedEvent, dict[str, Any], EvaluationContext], bool]
 

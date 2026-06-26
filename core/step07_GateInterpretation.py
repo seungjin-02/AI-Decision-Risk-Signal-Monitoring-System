@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from step06_ScoreAggregation import GateInputs
+from .step06_ScoreAggregation import GateInputs
 
 class RiskLevel(str, Enum):
     INFO = "INFO"

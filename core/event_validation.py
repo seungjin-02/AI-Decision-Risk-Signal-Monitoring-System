@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from step01_DecisionEvent import DecisionEvent
+from .step01_DecisionEvent import DecisionEvent
 
 @dataclass(frozen=True)
 class ValidationIssue:

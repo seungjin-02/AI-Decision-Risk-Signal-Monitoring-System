@@ -1,11 +1,11 @@
-from step05_SignalGeneration import Signal
-from step07_GateInterpretation import (
+from core.step05_SignalGeneration import Signal
+from core.step07_GateInterpretation import (
     RiskLevel,
     DecisionBoundaryResult,
     HumanReviewRequirement,
     GateDecision,
 )
-from step08_ActionGeneration import generate_action
+from core.step08_ActionGeneration import generate_action
 
 def make_gate_decision(
     level: RiskLevel,

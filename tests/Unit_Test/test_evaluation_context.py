@@ -1,6 +1,6 @@
-from step01_DecisionEvent import DecisionEvent
-from step02_NormalizedEvent import normalize_event
-from step03_EvaluationContext import build_evaluation_context
+from core.step01_DecisionEvent import DecisionEvent
+from core.step02_NormalizedEvent import normalize_event
+from core.step03_EvaluationContext import build_evaluation_context
 
 def build_context(event:DecisionEvent):
     normalized = normalize_event(event)

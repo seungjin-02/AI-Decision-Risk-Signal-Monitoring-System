@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from step05_SignalGeneration import Signal
-from step07_GateInterpretation import GateDecision, RiskLevel
+from .step05_SignalGeneration import Signal
+from .step07_GateInterpretation import GateDecision, RiskLevel
 
 @dataclass(frozen=True)
 class ActionRecommendation:

@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
 from typing import Any
-from step02_NormalizedEvent import NormalizedEvent
-from step05_SignalGeneration import Signal
-from step06_ScoreAggregation import ScoreSummary
-from step07_GateInterpretation import GateDecision
-from step08_ActionGeneration import ActionRecommendation
+from .step02_NormalizedEvent import NormalizedEvent
+from .step05_SignalGeneration import Signal
+from .step06_ScoreAggregation import ScoreSummary
+from .step07_GateInterpretation import GateDecision
+from .step08_ActionGeneration import ActionRecommendation
 
 
 @dataclass(frozen=True)

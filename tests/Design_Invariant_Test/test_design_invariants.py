@@ -1,12 +1,12 @@
-from step01_DecisionEvent import DecisionEvent
-from step02_NormalizedEvent import normalize_event
-from step03_EvaluationContext import build_evaluation_context
-from step04_RuleEvaluation import evaluate_rule
-from step05_SignalGeneration import build_signals
-from step06_ScoreAggregation import aggregate_scores, derive_gate_inputs
-from step07_GateInterpretation import interpret_gate, RiskLevel
-from step08_ActionGeneration import generate_action
-from step09_AlertOutput import build_alert_output
+from core.step01_DecisionEvent import DecisionEvent
+from core.step02_NormalizedEvent import normalize_event
+from core.step03_EvaluationContext import build_evaluation_context
+from core.step04_RuleEvaluation import evaluate_rule
+from core.step05_SignalGeneration import build_signals
+from core.step06_ScoreAggregation import aggregate_scores, derive_gate_inputs
+from core.step07_GateInterpretation import interpret_gate, RiskLevel
+from core.step08_ActionGeneration import generate_action
+from core.step09_AlertOutput import build_alert_output
 
 def run_pipeline_until_alert(event: DecisionEvent):
     normalized = normalize_event(event)
