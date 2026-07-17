@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Any
+
 from .step01_DecisionEvent import DecisionEvent
 
 @dataclass(frozen=True)
@@ -21,12 +22,12 @@ def _normalize_optional_str(value: str | None, *, lowercase: bool = False) -> st
 
     return normalized.lower() if lowercase else normalized
 
-def _normalize_optional_float(value: float | int | str | None) -> float | None:
+def _normalize_optional_float(value: float | int | None) -> float | None:
     if value is None:
         return None
     return float(value)
 
-def _normalize_optional_int(value: int | float | str | None) -> int | None:
+def _normalize_optional_int(value: int | None) -> int | None:
     if value is None:
         return None
     return int(value)

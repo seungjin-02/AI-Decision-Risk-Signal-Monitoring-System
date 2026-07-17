@@ -17,8 +17,8 @@ def generate_action(
     if decision.human_review.required:
         actions.append("human_review_required") # 책임 전이와 운영 대응을 분리
 
-    # 2. high risk signal 기반 (점수가 아니라 사건)
-    if any(signal.is_high_risk for signal in signals):
+    # 2. critical override 기반
+    if any(signal.is_critical_override for signal in signals):
         actions.append("immediate_investigation")
 
     # 3. uncertainty 기반

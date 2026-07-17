@@ -1,63 +1,58 @@
-from dataclasses import asdict, is_dataclass
 from typing import Any
-
 from app.schemas import EvaluateRequest
 from core.main import evaluate_event
 from core.step01_DecisionEvent import DecisionEvent
-
-
-FORBIDDEN_RESPONSE_FIELDS = {
-    "priority",
-    "combined_score",
-    "final_decision",
-    "auto_approve",
-    "auto_reject",
-    "approval_result",
-    "rejection_result",
-}
-
+from core.step05_SignalGeneration import Signal
+from core.step09_AlertOutput import AlertOutput
 
 class CoreValidationException(Exception):
     def __init__(self, message: str):
-        self.message = message
         super().__init__(message)
+        self.message = message
 
-
-def _to_dict(obj: Any) -> dict[str, Any]:
-    if is_dataclass(obj):
-        return asdict(obj)
-
-    if isinstance(obj, dict):
-        return obj
-
-    if hasattr(obj, "__dict__"):
-        return dict(obj.__dict__)
-
-    raise TypeError(f"Object is not serializable: {type(obj)}")
-
-
-def evaluate_request(payload: EvaluateRequest, trace_id: str) -> dict[str, Any]:
-    event = DecisionEvent(
-        event_id=payload.event_id,
-        decision_type=payload.decision_type,
-        confidence=payload.confidence,
-        latency_ms=payload.latency_ms,
-        model_version=payload.model_version,
-        error_code=payload.error_code,
-        metadata=payload.metadata,
+def build_decision_event(payload: EvaluateRequest) -> DecisionEvent:
+    return DecisionEvent(
+        event_id = payload.event_id,
+        decision_type = payload.decision_type,
+        confidence = payload.confidence,
+        latency_ms = payload.latency_ms,
+        model_version = payload.model_version,
+        error_code = payload.error_code,
+        metadata = payload.metadata
     )
 
+def signal_to_response(signal: Signal) -> dict[str, Any]:
+    return {
+        "rule_id": signal.rule_id,
+        "category": signal.category,
+        "score": signal.score,
+        "reason": signal.reason,
+        "evidence": signal.evidence,
+        "is_critical_override": signal.is_critical_override,
+        "metadata": signal.metadata
+    }
+
+def alert_to_response(alert: AlertOutput, trace_id: str) -> dict[str, Any]:
+    return {
+        "trace_id": trace_id,
+        "event_id": alert.event_id,
+        "level": alert.level,
+        "risk_score": alert.risk_score,
+        "uncertainty_score": alert.uncertainty_score,
+        "human_required": alert.human_required,
+        "recommended_actions": alert.recommended_actions,
+        "reason_summary": alert.reason_summary,
+        "signals": [
+            signal_to_response(signal) for signal in alert.signals
+        ],
+        "metadata": alert.metadata
+    }
+
+def evaluate_request(payload: EvaluateRequest, trace_id: str) -> dict[str, Any]:
+    event = build_decision_event(payload)
     try:
-        alert_output = evaluate_event(event)
+        alert = evaluate_event(event)
     except ValueError as exc:
         raise CoreValidationException(str(exc)) from exc
 
-    response = {
-        "trace_id": trace_id,
-        **_to_dict(alert_output),
-    }
-
-    for field in FORBIDDEN_RESPONSE_FIELDS:
-        response.pop(field, None)
-
-    return response
+    return alert_to_response(alert, trace_id)

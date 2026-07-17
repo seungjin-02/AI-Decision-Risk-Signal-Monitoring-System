@@ -11,7 +11,7 @@ class Signal:
     score: int
     reason: str
     evidence: dict[str, Any] = field(default_factory=dict)
-    is_high_risk: bool = False
+    is_critical_override: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
 def _build_evidence(
@@ -38,7 +38,7 @@ def build_signals(
             score = rule.score,
             reason = rule.reason,
             evidence = _build_evidence(event, rule.evidence_fields),
-            is_high_risk = rule.is_high_risk,
+            is_critical_override= rule.is_critical_override,
             metadata = dict(rule.metadata),
         )
         signals.append(signal)

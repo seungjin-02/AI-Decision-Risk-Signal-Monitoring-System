@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from .step02_NormalizedEvent import NormalizedEvent
 from .step05_SignalGeneration import Signal
-from .step06_ScoreAggregation import ScoreSummary
+from .step06_ScoreAggregation import SignalSummary
 from .step07_GateInterpretation import GateDecision
 from .step08_ActionGeneration import ActionRecommendation
 
@@ -22,18 +22,18 @@ class AlertOutput:
 def build_alert_output(
     event: NormalizedEvent,
     signals: list[Signal],
-    score_summary: ScoreSummary,
+    signal_summary: SignalSummary,
     decision: GateDecision,
     action: ActionRecommendation
 ) -> AlertOutput:
     return AlertOutput(
         event_id = event.event_id,
         level = decision.final_level.value,
-        risk_score = score_summary.risk_score,
-        uncertainty_score = score_summary.uncertainty_score,
+        risk_score = signal_summary.risk_score,
+        uncertainty_score = signal_summary.uncertainty_score,
         human_required = decision.human_review.required,
         recommended_actions = action.actions,
-        reason_summary=action.message,
+        reason_summary = action.message,
         signals = signals,
         metadata = dict(event.metadata)
     )

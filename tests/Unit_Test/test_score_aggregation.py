@@ -1,7 +1,8 @@
 from core.step05_SignalGeneration import Signal
-from core.step06_ScoreAggregation import aggregate_scores, derive_gate_inputs
+from core.step06_ScoreAggregation import summarize_signals
 
-def test_aggregate_risk_score():
+
+def test_summarize_risk_score():
     signals = [
         Signal(
             rule_id = "approve_confidence_low",
@@ -17,11 +18,15 @@ def test_aggregate_risk_score():
         )
     ]
 
-    score_summary = aggregate_scores(signals)
-    assert score_summary.risk_score == 5
-    assert score_summary.uncertainty_score == 0
+    summary = summarize_signals(signals)
 
-def test_aggregate_uncertainty_score():
+    assert summary.risk_score == 5
+    assert summary.uncertainty_score == 0
+    assert summary.has_critical_override_signal is False
+    assert summary.has_stability_signal is False
+
+
+def test_summarize_uncertainty_score():
     signals = [
         Signal(
             rule_id = "missing_confidence",
@@ -37,11 +42,15 @@ def test_aggregate_uncertainty_score():
         )
     ]
 
-    score_summary = aggregate_scores(signals)
-    assert score_summary.risk_score == 0
-    assert score_summary.uncertainty_score == 2
+    summary = summarize_signals(signals)
 
-def test_aggregate_risk_uncertainty_score():
+    assert summary.risk_score == 0
+    assert summary.uncertainty_score == 2
+    assert summary.has_critical_override_signal is False
+    assert summary.has_stability_signal is False
+
+
+def test_summarize_risk_and_uncertainty_scores():
     signals = [
         Signal(
             rule_id = "approve_confidence_low",
@@ -69,41 +78,62 @@ def test_aggregate_risk_uncertainty_score():
         )
     ]
 
-    score_summary = aggregate_scores(signals)
-    assert score_summary.risk_score == 5
-    assert score_summary.uncertainty_score == 2
+    summary = summarize_signals(signals)
 
-def test_aggregate_high_risk():
+    assert summary.risk_score == 5
+    assert summary.uncertainty_score == 2
+    assert summary.has_critical_override_signal is False
+    assert summary.has_stability_signal is False
+
+
+def test_failure_signal_critical_override():
     signals = [
         Signal(
-            rule_id = "system_error_override",
-            category = "risk",
+            rule_id = "evaluation_integrity_override",
+            category = "failure",
             score = 0,
-            reason="approve decision with low confidence",
-            is_high_risk = True
+            reason = "evaluation integrity failure requires critical review",
+            is_critical_override = True,
+            metadata = {
+                "failure_type": "system_error",
+                "score_contribution": "none",
+                "override_type": "critical"
+            }
         )
     ]
 
-    score_summary = aggregate_scores(signals)
-    gate_inputs = derive_gate_inputs(signals, score_summary)
-    assert score_summary.risk_score == 0
-    assert score_summary.uncertainty_score == 0
-    assert gate_inputs.has_high_risk_signal is True
-    assert gate_inputs.has_stability_signal is False
+    summary = summarize_signals(signals)
 
-def test_aggregate_stability():
+    assert summary.risk_score == 0
+    assert summary.uncertainty_score == 0
+    assert summary.has_critical_override_signal is True
+    assert summary.has_stability_signal is False
+
+
+def test_stability_signal_sets_stability_flag_without_changing_scores():
     signals = [
         Signal(
-            rule_id = "stable-context",
+            rule_id = "stability_signal",
             category = "stability",
             score = 0,
-            reason = "stable context detected"
+            reason = "stability signal detected"
         )
     ]
 
-    score_summary = aggregate_scores(signals)
-    gate_inputs = derive_gate_inputs(signals, score_summary)
-    assert score_summary.risk_score == 0
-    assert score_summary.uncertainty_score == 0
-    assert gate_inputs.has_high_risk_signal is False
-    assert gate_inputs.has_stability_signal is True
+    summary = summarize_signals(signals)
+
+    assert summary.risk_score == 0
+    assert summary.uncertainty_score == 0
+    assert summary.has_critical_override_signal is False
+    assert summary.has_stability_signal is True
+
+
+def test_empty_signals_summary():
+    signals = []
+
+    summary = summarize_signals(signals)
+
+    assert summary.risk_score == 0
+    assert summary.uncertainty_score == 0
+    assert summary.has_critical_override_signal is False
+    assert summary.has_stability_signal is False

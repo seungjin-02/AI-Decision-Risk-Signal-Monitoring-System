@@ -20,7 +20,7 @@ def run_pipeline_until_alert(event: DecisionEvent):
     alert = build_alert_output(
         event = normalized,
         signals = signals,
-        score_summary = score_summary,
+        signal_summary= score_summary,
         decision = decision,
         action = action
     )

@@ -14,7 +14,7 @@ class Rule:
     score: int
     reason: str
     evidence_fields: list[str] = field(default_factory=list)
-    is_high_risk: bool = False
+    is_critical_override: bool = False
     thresholds: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -26,7 +26,7 @@ class RuleEvaluation:
 def check_approve_confidence_low(
     event: NormalizedEvent,
     thresholds: dict[str, Any],
-    context: EvaluationContext,
+    context: EvaluationContext
 ) -> bool:
     if event.decision_type != "approve":
         return False
@@ -59,7 +59,7 @@ def check_missing_model_version(
 ) -> bool:
     return "model_version" in context.missing_fields
 
-def check_high_risk_override(
+def check_evaluation_integrity_failure(
     event: NormalizedEvent,
     thresholds: dict[str, Any],
     context: EvaluationContext
@@ -85,7 +85,7 @@ RULES: list[Rule] = [
         score = 3,
         reason = "approve decision with low confidence",
         evidence_fields = ["decision_type", "confidence"],
-        is_high_risk = False,
+        is_critical_override= False,
         thresholds = {"confidence": 0.6}
     ),
     Rule(
@@ -95,7 +95,7 @@ RULES: list[Rule] = [
         score = 2,
         reason = "response latency exceeded threshold",
         evidence_fields = ["latency_ms"],
-        is_high_risk = False,
+        is_critical_override= False,
         thresholds = {"latency_ms": 2000}
     ),
     Rule(
@@ -105,7 +105,7 @@ RULES: list[Rule] = [
         score = 1,
         reason = "confidence field is missing",
         evidence_fields = ["confidence"],
-        is_high_risk = False,
+        is_critical_override= False,
         thresholds = {}
     ),
     Rule(
@@ -115,18 +115,23 @@ RULES: list[Rule] = [
         score = 1,
         reason = "model_version field is missing",
         evidence_fields = ["model_version"],
-        is_high_risk = False,
+        is_critical_override= False,
         thresholds = {}
     ),
     Rule(
-        rule_id = "system_error_override",
-        category = "risk",
-        condition = check_high_risk_override,
+        rule_id = "evaluation_integrity_override",
+        category = "failure",
+        condition = check_evaluation_integrity_failure,
         score = 0,
-        reason = "critical system error detected",
+        reason = "evaluation integrity failure requires critical review",
         evidence_fields = ["error_code"],
-        is_high_risk = True,
-        thresholds = {"error_codes": ["timeout_01", "gateway_failure"]}
+        is_critical_override = True,
+        thresholds = {"error_codes": ["timeout_01", "gateway_failure"]},
+        metadata = {
+            "failure_type": "system_error",
+            "score_contribution": "none",
+            "override_type": "critical",
+        },
     ),
     Rule(
         rule_id = "stability_signal",
@@ -135,7 +140,7 @@ RULES: list[Rule] = [
         score = 0,
         reason = "stability signal detected",
         evidence_fields = [],
-        is_high_risk = False,
+        is_critical_override= False,
         thresholds = {}
     )
 ]
@@ -153,37 +158,7 @@ def evaluate_rule(
         evaluations.append(
             RuleEvaluation(
                 rule = rule,
-                triggered = triggered,
+                triggered = triggered
             )
         )
     return evaluations
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

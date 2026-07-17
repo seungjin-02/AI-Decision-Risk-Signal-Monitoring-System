@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
-from .step06_ScoreAggregation import GateInputs
+
+from .step06_ScoreAggregation import SignalSummary
 
 class RiskLevel(str, Enum):
     INFO = "INFO"
@@ -23,7 +24,7 @@ class HumanReviewRequirement:
     """
     인간 검토 필요 여부를 표현한다.
 
-    human_required는 위험 수준(final_level)과 별개 차원이며,
+    human_required는 위험 수준과 별개 차원이며,
     시스템이 현재 판단을 스스로 확정할 수 있는지와 관련된다.
     """
     required: bool
@@ -37,16 +38,16 @@ class GateDecision:
     human_review: HumanReviewRequirement
     gate_reason: str
 
-def interpret_gate(inputs: GateInputs) -> GateDecision:
+def interpret_gate(inputs: SignalSummary) -> GateDecision:
     low_uncertainty = inputs.uncertainty_score == 0
     high_uncertainty = inputs.uncertainty_score >= 1
 
-    # Rule1. High risk override
-    if inputs.has_high_risk_signal:
+    # Rule1. Critical override
+    if inputs.has_critical_override_signal:
         final_level = RiskLevel.CRITICAL
         human_required = True
         gate_reason = (
-            "high-risk signal triggered critical interpretation and requires human review"
+            "critical override signal requires critical interpretation and human review"
         )
 
     # Rule2. High risk zone
@@ -95,7 +96,7 @@ def interpret_gate(inputs: GateInputs) -> GateDecision:
             )
 
     # Rule5. Stability mitigation (현재 구현 상태에서는 극히 제한적으로 조건만 명시)
-    if (inputs.has_stability_signal and final_level == RiskLevel.WARN and inputs.risk_score <= 2 and low_uncertainty):
+    if inputs.has_stability_signal and final_level == RiskLevel.WARN and inputs.risk_score <= 2 and low_uncertainty:
         final_level = RiskLevel.INFO
         human_required = False
         gate_reason = (
@@ -105,16 +106,14 @@ def interpret_gate(inputs: GateInputs) -> GateDecision:
     boundary = DecisionBoundaryResult(
         auto_finalize_allowed = not human_required,
         reason = (
-            "automatic finalization is restricted" if human_required
-            else "automatic finalization is allowed"
+            "automatic finalization is restricted" if human_required else "automatic finalization is allowed"
         )
     )
 
     human_review = HumanReviewRequirement(
         required = human_required,
         reason = (
-            "human review is required" if human_required
-            else "human review is not required"
+            "human review is required" if human_required else "human review is not required"
         )
     )
 

@@ -4,21 +4,9 @@ from core.step03_EvaluationContext import build_evaluation_context
 from core.step04_RuleEvaluation import evaluate_rule
 from core.step05_SignalGeneration import build_signals
 
-def build_signals_from_event(event: DecisionEvent):
-    normalized = normalize_event(event)
-    context = build_evaluation_context(normalized)
-    evaluations = evaluate_rule(normalized, context)
-    return build_signals(evaluations, normalized)
-
-def get_signal_by_rule_id(signals, rule_id: str):
-    for signal in signals:
-        if signal.rule_id == rule_id:
-            return signal
-    return None
-
-def test_no_signal_when_no_triggered():
+def test_no_signal_when_no_rules_triggered():
     event = DecisionEvent(
-        event_id = "event_001",
+        event_id = "evt_signal_001",
         decision_type = "approve",
         confidence = 0.9,
         latency_ms = 800,
@@ -26,29 +14,47 @@ def test_no_signal_when_no_triggered():
         error_code = None
     )
 
-    signals = build_signals_from_event(event)
+    normalized = normalize_event(event)
+    context = build_evaluation_context(normalized)
+    evaluations = evaluate_rule(normalized, context)
+    signals = build_signals(evaluations, normalized)
+
     assert signals == []
 
-def test_low_confidence():
+def test_low_confidence_signal():
     event = DecisionEvent(
-        event_id = "event_002",
+        event_id = "evt_signal_002",
         decision_type = "approve",
         confidence = 0.3,
         latency_ms = 800,
         model_version = "v1",
-        error_code = None
+        error_code = None,
     )
 
-    signals = build_signals_from_event(event)
-    signal = get_signal_by_rule_id(signals, "approve_confidence_low")
-    assert signal is not None
+    normalized = normalize_event(event)
+    context = build_evaluation_context(normalized)
+    evaluations = evaluate_rule(normalized, context)
+    signals = build_signals(evaluations, normalized)
+
+    assert len(signals) == 1
+
+    signal = signals[0]
+
+    assert signal.rule_id == "approve_confidence_low"
     assert signal.category == "risk"
     assert signal.score == 3
-    assert signal.is_high_risk is False
+    assert signal.reason == "approve decision with low confidence"
+    assert signal.evidence == {
+        "decision_type": "approve",
+        "confidence": 0.3
+    }
+    assert signal.is_critical_override is False
+    assert signal.metadata == {}
 
-def test_latency_high():
+
+def test_latency_high_signal():
     event = DecisionEvent(
-        event_id = "event_003",
+        event_id = "evt_signal_003",
         decision_type = "approve",
         confidence = 0.9,
         latency_ms = 2800,
@@ -56,97 +62,159 @@ def test_latency_high():
         error_code = None
     )
 
-    signals = build_signals_from_event(event)
-    signal = get_signal_by_rule_id(signals, "latency_high")
+    normalized = normalize_event(event)
+    context = build_evaluation_context(normalized)
+    evaluations = evaluate_rule(normalized, context)
+    signals = build_signals(evaluations, normalized)
 
-    assert signal is not None
+    assert len(signals) == 1
+
+    signal = signals[0]
+
+    assert signal.rule_id == "latency_high"
     assert signal.category == "risk"
     assert signal.score == 2
-    assert signal.is_high_risk is False
+    assert signal.reason == "response latency exceeded threshold"
+    assert signal.evidence == {
+        "latency_ms": 2800
+    }
+    assert signal.is_critical_override is False
+    assert signal.metadata == {}
 
-def test_missing_confidence():
+def test_missing_confidence_signal():
     event = DecisionEvent(
-        event_id = "event_004",
+        event_id = "evt_signal_004",
         decision_type = "approve",
         confidence = None,
-        latency_ms = 2800,
+        latency_ms = 800,
         model_version = "v1",
         error_code = None
     )
 
-    signals = build_signals_from_event(event)
-    signal = get_signal_by_rule_id(signals, "missing_confidence")
-    assert signal is not None
+    normalized = normalize_event(event)
+    context = build_evaluation_context(normalized)
+    evaluations = evaluate_rule(normalized, context)
+    signals = build_signals(evaluations, normalized)
+
+    assert len(signals) == 1
+
+    signal = signals[0]
+
+    assert signal.rule_id == "missing_confidence"
     assert signal.category == "uncertainty"
     assert signal.score == 1
-    assert signal.is_high_risk is False
+    assert signal.reason == "confidence field is missing"
+    assert signal.evidence == {
+        "confidence": None
+    }
+    assert signal.is_critical_override is False
+    assert signal.metadata == {}
 
-def test_missing_model_version():
+def test_missing_model_version_signal_when_none():
     event = DecisionEvent(
-        event_id = "event_005",
+        event_id = "evt_signal_005",
         decision_type = "approve",
-        confidence = None,
+        confidence = 0.9,
+        latency_ms = 800,
+        model_version = None,
+        error_code = None
+    )
+
+    normalized = normalize_event(event)
+    context = build_evaluation_context(normalized)
+    evaluations = evaluate_rule(normalized, context)
+    signals = build_signals(evaluations, normalized)
+
+    assert len(signals) == 1
+
+    signal = signals[0]
+
+    assert signal.rule_id == "missing_model_version"
+    assert signal.category == "uncertainty"
+    assert signal.score == 1
+    assert signal.reason == "model_version field is missing"
+    assert signal.evidence == {
+        "model_version": None
+    }
+    assert signal.is_critical_override is False
+    assert signal.metadata == {}
+
+def test_missing_model_version_signal_when_blank():
+    event = DecisionEvent(
+        event_id = "evt_signal_006",
+        decision_type = "approve",
+        confidence = 0.9,
+        latency_ms = 800,
+        model_version = "   ",
+        error_code = None
+    )
+
+    normalized = normalize_event(event)
+    context = build_evaluation_context(normalized)
+    evaluations = evaluate_rule(normalized, context)
+    signals = build_signals(evaluations, normalized)
+
+    assert len(signals) == 1
+
+    signal = signals[0]
+
+    assert signal.rule_id == "missing_model_version"
+    assert signal.category == "uncertainty"
+    assert signal.score == 1
+    assert signal.evidence == {
+        "model_version": None
+    }
+
+def test_evaluation_integrity_override_signal():
+    event = DecisionEvent(
+        event_id = "evt_signal_007",
+        decision_type = "approve",
+        confidence = 0.9,
+        latency_ms = 800,
+        model_version = "v1",
+        error_code = "gateway_failure"
+    )
+
+    normalized = normalize_event(event)
+    context = build_evaluation_context(normalized)
+    evaluations = evaluate_rule(normalized, context)
+    signals = build_signals(evaluations, normalized)
+
+    assert len(signals) == 1
+
+    signal = signals[0]
+
+    assert signal.rule_id == "evaluation_integrity_override"
+    assert signal.category == "failure"
+    assert signal.score == 0
+    assert signal.reason == "evaluation integrity failure requires critical review"
+    assert signal.evidence == {
+        "error_code": "gateway_failure"
+    }
+    assert signal.is_critical_override is True
+    assert signal.metadata == {
+        "failure_type": "system_error",
+        "score_contribution": "none",
+        "override_type": "critical"
+    }
+
+def test_multiple_triggered_rules_create_multiple_signals():
+    event = DecisionEvent(
+        event_id = "evt_signal_008",
+        decision_type = "approve",
+        confidence = 0.3,
         latency_ms = 2800,
         model_version = None,
         error_code = None
     )
 
-    signals = build_signals_from_event(event)
-    signal = get_signal_by_rule_id(signals, "missing_model_version")
-    assert signal is not None
-    assert signal.category == "uncertainty"
-    assert signal.score == 1
-    assert signal.is_high_risk is False
+    normalized = normalize_event(event)
+    context = build_evaluation_context(normalized)
+    evaluations = evaluate_rule(normalized, context)
+    signals = build_signals(evaluations, normalized)
 
-def test_is_high_risk_override():
-    event = DecisionEvent(
-        event_id = "event_006",
-        decision_type = "approve",
-        confidence = 0.9,
-        latency_ms = 2800,
-        model_version = "v1",
-        error_code = "gateway_failure"
-    )
-
-    signals = build_signals_from_event(event)
-    signal = get_signal_by_rule_id(signals, "system_error_override")
-    assert signal is not None
-    assert signal.category == "risk"
-    assert signal.score == 0
-    assert signal.is_high_risk is True
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    assert [signal.rule_id for signal in signals] == [
+        "approve_confidence_low",
+        "latency_high",
+        "missing_model_version"
+    ]
