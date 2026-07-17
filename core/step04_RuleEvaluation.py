@@ -67,8 +67,8 @@ def check_evaluation_integrity_failure(
     if event.error_code is None:
         return False
 
-    high_risk_error_codes = thresholds.get("error_codes", [])
-    return event.error_code in high_risk_error_codes
+    critical_override_error_codes = thresholds.get("error_codes", [])
+    return event.error_code in critical_override_error_codes
 
 def check_stability_signal(
     event: NormalizedEvent,

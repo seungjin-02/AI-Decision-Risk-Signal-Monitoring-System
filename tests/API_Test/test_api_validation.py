@@ -71,7 +71,7 @@ def test_api_validation_rejects_non_integer_latency_ms():
     body = response.json()
     assert_api_validation_error_response(response, body)
 
-def test_api_validation_rejects_missing_required_event_id():
+def test_api_validation_rejects_non_string_event_id():
     payload = {
         "event_id": 1234,
         "decision_type": "approve",
