@@ -94,19 +94,19 @@ class AlertRepository:
                     ),
                 )
 
-            for action_order, action_word in enumerate(alert.recommended_actions):
+            for action_order, action_code in enumerate(alert.recommended_actions):
                 connection.execute(
                     """
                     INSERT INTO alert_actions (
                         alert_id,
-                        action_word,
+                        action_code,
                         action_order
                     )
                     VALUES (?, ?, ?)
                     """,
                     (
                         alert_id,
-                        action_word,
+                        action_code,
                         action_order,
                     ),
                 )
