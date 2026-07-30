@@ -15,9 +15,9 @@ def init_db(db_path: str | Path) -> None:
     connection = create_connection(db_path)
 
     try:
-        connection.executescript(schema_sql)
+        connection.executescript("BEGIN;\n" + schema_sql)
         connection.commit()
-    except Exception:
+    except sqlite3.Error:
         connection.rollback()
         raise
     finally:

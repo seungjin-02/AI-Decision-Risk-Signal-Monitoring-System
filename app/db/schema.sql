@@ -39,20 +39,11 @@ CREATE TABLE IF NOT EXISTS alert_signals (
 CREATE TABLE IF NOT EXISTS alert_actions (
     action_id INTEGER PRIMARY KEY,
     alert_id INTEGER NOT NULL,
-    action_word TEXT NOT NULL,
+    action_code TEXT NOT NULL,
     action_order INTEGER NOT NULL
         CHECK (action_order >= 0),
 
     FOREIGN KEY (alert_id) REFERENCES alerts(alert_id) ON DELETE CASCADE,
-    UNIQUE (alert_id, action_word),
+    UNIQUE (alert_id, action_code),
     UNIQUE (alert_id, action_order)
 );
-
-CREATE INDEX IF NOT EXISTS idx_alerts_trace_id
-    ON alerts(trace_id);
-
-CREATE INDEX IF NOT EXISTS idx_alerts_event_id
-    ON alerts(event_id);
-
-CREATE INDEX IF NOT EXISTS idx_alerts_created_at
-    ON alerts(created_at DESC);
