@@ -1,9 +1,10 @@
 from typing import Any
+
 from app.schemas import EvaluateRequest
-from core.main import evaluate_event
 from core.step01_DecisionEvent import DecisionEvent
 from core.step05_SignalGeneration import Signal
 from core.step09_AlertOutput import AlertOutput
+from core.main import evaluate_event
 
 class CoreValidationException(Exception):
     def __init__(self, message: str):
@@ -12,13 +13,13 @@ class CoreValidationException(Exception):
 
 def build_decision_event(payload: EvaluateRequest) -> DecisionEvent:
     return DecisionEvent(
-        event_id = payload.event_id,
-        decision_type = payload.decision_type,
-        confidence = payload.confidence,
-        latency_ms = payload.latency_ms,
-        model_version = payload.model_version,
-        error_code = payload.error_code,
-        metadata = payload.metadata
+        event_id=payload.event_id,
+        decision_type=payload.decision_type,
+        confidence=payload.confidence,
+        latency_ms=payload.latency_ms,
+        model_version=payload.model_version,
+        error_code=payload.error_code,
+        metadata=payload.metadata,
     )
 
 def signal_to_response(signal: Signal) -> dict[str, Any]:
@@ -42,15 +43,13 @@ def alert_to_response(alert: AlertOutput, trace_id: str) -> dict[str, Any]:
         "human_required": alert.human_required,
         "recommended_actions": alert.recommended_actions,
         "reason_summary": alert.reason_summary,
-        "signals": [
-            signal_to_response(signal) for signal in alert.signals
-        ],
+        "signals": [signal_to_response(signal) for signal in alert.signals],
         "metadata": alert.metadata
     }
 
 def evaluate_request(payload: EvaluateRequest, trace_id: str) -> dict[str, Any]:
-    event = build_decision_event(payload)
     try:
+        event = build_decision_event(payload)
         alert = evaluate_event(event)
     except ValueError as exc:
         raise CoreValidationException(str(exc)) from exc
