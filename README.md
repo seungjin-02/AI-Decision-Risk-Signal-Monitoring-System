@@ -143,7 +143,7 @@ failure signal
 
 ## System Architecture
 
-현재 시스템은 FastAPI API layer와 core evaluation pipeline으로 분리되어 있습니다.
+현재 시스템은 FastAPI API layer, core evaluation pipeline, SQLite persistence layer로 분리되어 있습니다.
 
 ```text
 Client
@@ -155,6 +155,10 @@ Client
   → API Response Mapping
   → JSON Response
 ```
+
+현재 `/evaluate` 요청 흐름은 persistence layer와 연결되어 있지 않습니다.
+
+평가 결과 저장은 `AlertRepository`를 직접 호출하는 방식으로 분리되어 있습니다.
 
 ### API Layer
 
@@ -178,6 +182,27 @@ app/
 - API validation error와 core validation error 분리
 - core 결과를 API response contract로 변환
 - core layer가 HTTP/FastAPI에 의존하지 않도록 보호
+
+---
+
+### Persistence Layer
+
+Persistence layer는 core evaluation 결과를 SQLite에 저장하는 역할을 담당합니다.
+
+```text
+app/db/
+  connection.py
+  alert_repository.py
+  schema.sql
+```
+
+현재 구현 범위는 다음과 같습니다.
+
+- SQLite connection 생성 및 foreign key 활성화
+- alerts, alert_signals, alert_actions table 초기화
+- AlertOutput, signal, recommended action 저장
+- trace_id와 UTC created_at 저장
+- 자식 row 저장 실패 시 전체 transaction rollback
 
 ---
 
@@ -217,23 +242,6 @@ DecisionEvent
 ---
 
 ## API Contract
-
-### Health Check
-
-```http
-GET /health
-```
-
-Response:
-
-```json
-{
-  "trace_id": "generated-trace-id",
-  "status": "ok"
-}
-```
-
----
 
 ### Evaluate Event
 
@@ -437,7 +445,7 @@ recommended_actions:
 
 ## Test Strategy
 
-테스트는 네 가지 계층으로 구성되어 있습니다.
+테스트는 다섯 가지 계층으로 구성되어 있습니다.
 
 ```text
 tests/
@@ -445,6 +453,7 @@ tests/
   Integration_Test/
   Design_Invariant_Test/
   API_Test/
+  DB_Test/
 ```
 
 ### Unit Tests
@@ -500,15 +509,27 @@ FastAPI 계층의 외부 계약을 검증합니다.
 
 검증 대상 예시:
 
-- `GET /health`
 - `POST /evaluate`
-- success response contract
-- signal response schema
-- error response schema
+- success response의 주요 필드
 - 400 core validation error
 - 422 API validation error
-- trace_id body/header consistency
-- internal core object가 API response에 노출되지 않는지 여부
+- 500 system error response contract
+- 500 response의 빈 details list
+- 500 response의 trace_id body/header consistency
+
+---
+
+### DB Tests
+
+SQLite schema 초기화와 AlertRepository의 transaction 동작을 검증합니다.
+
+검증 대상 예시:
+
+- schema table 생성
+- foreign key 활성화 및 제약조건
+- alert, signal, recommended action 저장
+- 저장된 action 순서 보존
+- 자식 row 저장 실패 시 전체 rollback
 
 ---
 
@@ -518,6 +539,10 @@ FastAPI 계층의 외부 계약을 검증합니다.
 app/
   main.py
   schemas.py
+  db/
+    connection.py
+    alert_repository.py
+    schema.sql
   services/
     evaluation_service.py
   utils/
@@ -546,7 +571,6 @@ tests/
     test_score_aggregation.py
     test_gate_interpretation.py
     test_action_generation.py
-    test_alert_output.py
 
   Integration_Test/
     test_pipeline_validation.py
@@ -559,9 +583,11 @@ tests/
     test_evaluate_endpoint.py
     test_api_validation.py
     test_core_validation_error.py
-    test_trace_id_response.py
-    test_api_response_constraints.py
-    test_health_endpoint.py
+    test_system_error.py
+
+  DB_Test/
+    test_connection.py
+    test_alert_repository.py
 
 docs/
   architecture.md
@@ -584,12 +610,6 @@ python core/main.py
 
 ```bash
 uvicorn app.main:app --reload
-```
-
-Health check:
-
-```bash
-curl http://127.0.0.1:8000/health
 ```
 
 Evaluate event:
@@ -644,6 +664,12 @@ API tests:
 python -m pytest tests/API_Test -v
 ```
 
+DB tests:
+
+```bash
+python -m pytest tests/DB_Test -v
+```
+
 ---
 
 ## Documentation
@@ -668,7 +694,8 @@ python -m pytest tests/API_Test -v
 - system failure를 risk score에 합산하기
 - 동적 threshold 최적화
 - 사용자 인증 / 권한 관리
-- DB 기반 alert 저장
+- `/evaluate` 결과의 자동 DB 저장
+- 저장된 alert 조회 API
 - 운영자 dashboard 제공
 - 배포 환경 제공
 
@@ -682,6 +709,8 @@ python -m pytest tests/API_Test -v
 - 자동 판단 경계 정의
 - API response contract 제공
 - trace_id 기반 요청 추적성 제공
+- SQLite 기반 alert, signal, recommended action 저장
+- transaction 실패 시 전체 rollback
 
 ---
 
@@ -701,29 +730,37 @@ Completed:
 - Gate interpretation
 - Action recommendation
 - Alert output construction
+- SQLite schema and connection
+- AlertRepository persistence
+- Transaction rollback handling
 - FastAPI API layer
-- /health endpoint
 - /evaluate endpoint
 - trace_id middleware
-- API response schema
+- API request / response schema definitions
 - API error handling
 - Unit tests
 - Integration tests
 - Design invariant tests
 - API tests
+- DB tests
 ```
 
 현재 구현되지 않은 범위는 다음과 같습니다.
 
 ```text
 Not Yet Implemented:
-- Database persistence
+- /health endpoint
+- FastAPI response_model enforcement
+- /evaluate persistence integration
+- Alert retrieval repository
 - Alert history API
 - GET /alerts
 - GET /alerts/{event_id}
 - Authentication / authorization
 - Dashboard
 - Deployment pipeline
+- Dependency lock file
+- GitHub Actions CI
 - Observability stack
 ```
 
