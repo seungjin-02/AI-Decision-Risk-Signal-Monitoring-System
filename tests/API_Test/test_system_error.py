@@ -34,7 +34,8 @@ def test_unexpected_internal_error(monkeypatch):
     assert set(body.keys()) == {
         "trace_id",
         "error_type",
-        "message"
+        "message",
+        "details",
     }
     assert body["error_type"] == "system_error"
     assert body["message"] == "Unexpected internal server error"

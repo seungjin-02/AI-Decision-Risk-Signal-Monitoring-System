@@ -41,6 +41,7 @@ async def core_validation_exception_handler(request: Request, exc: CoreValidatio
             "trace_id": trace_id,
             "error_type": "core_validation_error",
             "message": str(exc),
+            "details": [],
         },
     )
 
@@ -55,6 +56,7 @@ async def system_exception_handler(request: Request, exc: Exception):
             "trace_id": trace_id,
             "error_type": "system_error",
             "message": "Unexpected internal server error",
+            "details": [],
         },
     )
 
