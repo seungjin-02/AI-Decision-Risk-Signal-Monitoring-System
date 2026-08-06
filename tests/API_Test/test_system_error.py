@@ -41,3 +41,4 @@ def test_unexpected_internal_error(monkeypatch):
     assert body["message"] == "Unexpected internal server error"
     assert "x-trace-id" in response.headers
     assert body["trace_id"] == response.headers["x-trace-id"]
+    assert body["details"] == []
