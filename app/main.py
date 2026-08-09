@@ -1,12 +1,28 @@
-from fastapi import FastAPI, Request
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.db.alert_repository import AlertRepository
+from app.db.connection import init_db
 from app.services.evaluation_service import CoreValidationException, evaluate_request
 from app.utils.trace import generate_trace_id
 from app.schemas import EvaluateRequest
 
-app = FastAPI()
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATABASE_PATH = PROJECT_ROOT / "data" / "alert.db"
+
+def get_alert_repository() -> AlertRepository:
+    return AlertRepository(DATABASE_PATH)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db(DATABASE_PATH)
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 @app.middleware("http")
 async def trace_id_middleware(request: Request, call_next):
@@ -61,7 +77,7 @@ async def system_exception_handler(request: Request, exc: Exception):
     )
 
 @app.post("/evaluate")
-def evaluate_endpoint(payload: EvaluateRequest, request: Request):
+def evaluate_endpoint(payload: EvaluateRequest, request: Request, repository: AlertRepository = Depends(get_alert_repository)):
     trace_id = request.state.trace_id
 
-    return evaluate_request(payload, trace_id)
+    return evaluate_request(payload, trace_id, repository)

@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.db.alert_repository import AlertRepository
 from app.schemas import EvaluateRequest
 from core.step01_DecisionEvent import DecisionEvent
 from core.step05_SignalGeneration import Signal
@@ -47,11 +48,13 @@ def alert_to_response(alert: AlertOutput, trace_id: str) -> dict[str, Any]:
         "metadata": alert.metadata
     }
 
-def evaluate_request(payload: EvaluateRequest, trace_id: str) -> dict[str, Any]:
+def evaluate_request(payload: EvaluateRequest, trace_id: str, repository: AlertRepository) -> dict[str, Any]:
     try:
         event = build_decision_event(payload)
         alert = evaluate_event(event)
     except ValueError as exc:
         raise CoreValidationException(str(exc)) from exc
+
+    repository.save(alert, trace_id)
 
     return alert_to_response(alert, trace_id)
