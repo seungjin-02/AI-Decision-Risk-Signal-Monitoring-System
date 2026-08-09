@@ -1,10 +1,11 @@
 from fastapi.testclient import TestClient
 
+from app.db.connection import create_connection
 from app.main import app
 
 client = TestClient(app)
 
-def test_evaluate_endpoint():
+def test_evaluate_endpoint(test_db_path):
     payload = {
         "event_id": "evt_api_test_001",
         "decision_type": "approve",
@@ -35,3 +36,42 @@ def test_evaluate_endpoint():
     }
 
     assert required_fields.issubset(body.keys())
+
+    connection = create_connection(test_db_path)
+
+    try:
+        alert_row = connection.execute(
+            """
+            SELECT
+                alert_id,
+                trace_id,
+                event_id,
+                risk_score,
+                uncertainty_score
+            FROM alerts
+            WHERE trace_id = ?
+            """,
+            (body["trace_id"],),
+        ).fetchone()
+
+        assert alert_row is not None
+        assert alert_row["trace_id"] == body["trace_id"]
+        assert alert_row["event_id"] == body["event_id"]
+        assert alert_row["risk_score"] == body["risk_score"]
+        assert alert_row["uncertainty_score"] == body["uncertainty_score"]
+
+        signal_count = connection.execute(
+            "SELECT COUNT(*) FROM alert_signals WHERE alert_id = ?",
+            (alert_row["alert_id"],),
+        ).fetchone()[0]
+
+        action_count = connection.execute(
+            "SELECT COUNT(*) FROM alert_actions WHERE alert_id = ?",
+            (alert_row["alert_id"],),
+        ).fetchone()[0]
+
+        assert signal_count == len(body["signals"])
+        assert action_count == len(body["recommended_actions"])
+
+    finally:
+        connection.close()
