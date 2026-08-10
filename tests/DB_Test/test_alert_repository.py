@@ -2,7 +2,7 @@ import json
 import sqlite3
 import pytest
 from app.db.connection import create_connection, init_db
-from app.db.alert_repository import AlertRepository
+from app.db.alert_repository import AlertRepository, PersistenceError
 from core.main import evaluate_event
 from core.step01_DecisionEvent import DecisionEvent
 
@@ -203,11 +203,13 @@ def test_save_rollback(tmp_path):
     alert = evaluate_event(event)
     alert.signals.append(alert.signals[0]) # 의도적 중복 추가
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(PersistenceError) as exc_info:
         repository.save(
             alert=alert,
             trace_id="trace_test_004",
         )
+
+    assert isinstance(exc_info.value.__cause__, sqlite3.IntegrityError) # 원래 예외 == sqlite3.INtegrityError 인지 검증
 
     connection = create_connection(db_path)
 

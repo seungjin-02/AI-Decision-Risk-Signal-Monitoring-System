@@ -1,9 +1,13 @@
+import sqlite3
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from app.db.connection import create_connection
 from core.step09_AlertOutput import AlertOutput
+
+class PersistenceError(Exception):
+    pass
 
 @dataclass(frozen=True)
 class SavedAlert:
@@ -117,6 +121,10 @@ class AlertRepository:
                 alert_id=alert_id,
                 created_at=created_at,
             )
+
+        except sqlite3.Error as exc:
+            connection.rollback()
+            raise PersistenceError("Failed to save alert") from exc
 
         except Exception:
             connection.rollback()

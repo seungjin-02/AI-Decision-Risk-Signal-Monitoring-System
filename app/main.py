@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.db.alert_repository import AlertRepository
+from app.db.alert_repository import AlertRepository, PersistenceError
 from app.db.connection import init_db
 from app.services.evaluation_service import CoreValidationException, evaluate_request
 from app.utils.trace import generate_trace_id
@@ -57,6 +57,21 @@ async def core_validation_exception_handler(request: Request, exc: CoreValidatio
             "trace_id": trace_id,
             "error_type": "core_validation_error",
             "message": str(exc),
+            "details": [],
+        },
+    )
+
+@app.exception_handler(PersistenceError)
+async def persistence_exception_handler(request: Request, exc: PersistenceError):
+    trace_id = request.state.trace_id
+
+    return JSONResponse(
+        status_code=500,
+        headers={"X-Trace-ID": trace_id},
+        content={
+            "trace_id": trace_id,
+            "error_type": "persistence_error",
+            "message": "Failed to persist evaluation result",
             "details": [],
         },
     )
