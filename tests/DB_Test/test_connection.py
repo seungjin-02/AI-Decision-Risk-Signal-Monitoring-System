@@ -99,10 +99,8 @@ def test_create_connection_uses_row_factory(tmp_path):
     finally:
         connection.close()
 
-def test_foreign_key_rejects_signal_without_alert(tmp_path):
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    connection = create_connection(db_path)
+def test_foreign_key_rejects_signal_without_alert(test_db_path):
+    connection = create_connection(test_db_path)
 
     try:
         with pytest.raises(

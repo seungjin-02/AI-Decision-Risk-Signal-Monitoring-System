@@ -1,16 +1,13 @@
 import json
 import sqlite3
 import pytest
-from app.db.connection import create_connection, init_db
-from app.db.alert_repository import AlertRepository, PersistenceError
+
+from app.db.alert_repository import PersistenceError
+from app.db.connection import create_connection
 from core.main import evaluate_event
 from core.step01_DecisionEvent import DecisionEvent
 
-def test_save_stores_alert_row(tmp_path):
-    db_path = tmp_path / 'test.db'
-    init_db(db_path)
-    repository = AlertRepository(db_path)
-
+def test_save_stores_alert_row(repository, test_db_path):
     event = DecisionEvent(
         event_id="event_repository_001",
         decision_type="approve",
@@ -30,7 +27,7 @@ def test_save_stores_alert_row(tmp_path):
         trace_id="trace_test_001",
     )
 
-    connection = create_connection(db_path)
+    connection = create_connection(test_db_path)
 
     try:
         alert_row = connection.execute(
@@ -67,11 +64,7 @@ def test_save_stores_alert_row(tmp_path):
     finally:
         connection.close()
 
-def test_save_stores_signal_row(tmp_path):
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    repository = AlertRepository(db_path)
-
+def test_save_stores_signal_row(repository, test_db_path):
     event = DecisionEvent(
         event_id="event_repository_002",
         decision_type="approve",
@@ -91,7 +84,7 @@ def test_save_stores_signal_row(tmp_path):
         trace_id="trace_test_002",
     )
 
-    connection = create_connection(db_path)
+    connection = create_connection(test_db_path)
 
     try:
         signal_rows = connection.execute(
@@ -129,11 +122,7 @@ def test_save_stores_signal_row(tmp_path):
     finally:
         connection.close()
 
-def test_save_stores_action_row(tmp_path):
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    repository = AlertRepository(db_path)
-
+def test_save_stores_action_row(repository, test_db_path):
     event = DecisionEvent(
         event_id="event_repository_003",
         decision_type="approve",
@@ -153,7 +142,7 @@ def test_save_stores_action_row(tmp_path):
         trace_id="trace_test_003",
     )
 
-    connection = create_connection(db_path)
+    connection = create_connection(test_db_path)
 
     try:
         action_rows = connection.execute(
@@ -183,11 +172,7 @@ def test_save_stores_action_row(tmp_path):
     finally:
         connection.close()
 
-def test_save_rollback(tmp_path):
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    repository = AlertRepository(db_path)
-
+def test_save_rollback(repository, test_db_path):
     event = DecisionEvent(
         event_id="event_repository_004",
         decision_type="approve",
@@ -201,7 +186,9 @@ def test_save_rollback(tmp_path):
     )
 
     alert = evaluate_event(event)
-    alert.signals.append(alert.signals[0]) # 의도적 중복 추가
+
+    # 동일한 rule_id를 가진 signal을 의도적으로 중복 추가
+    alert.signals.append(alert.signals[0])
 
     with pytest.raises(PersistenceError) as exc_info:
         repository.save(
@@ -209,9 +196,10 @@ def test_save_rollback(tmp_path):
             trace_id="trace_test_004",
         )
 
-    assert isinstance(exc_info.value.__cause__, sqlite3.IntegrityError) # 원래 예외 == sqlite3.INtegrityError 인지 검증
+    # PersistenceError가 원래 IntegrityError를 보존하는지 검증
+    assert isinstance(exc_info.value.__cause__, sqlite3.IntegrityError)
 
-    connection = create_connection(db_path)
+    connection = create_connection(test_db_path)
 
     try:
         alert_count = connection.execute(
@@ -232,3 +220,44 @@ def test_save_rollback(tmp_path):
 
     finally:
         connection.close()
+
+def test_find_by_id_returns_none_when_alert_does_not_exist(repository):
+    result = repository.find_by_id(alert_id=999)
+
+    assert result is None
+
+def test_find_by_id_returns_existing_alert(repository):
+    event = DecisionEvent(
+        event_id="event_repository_005",
+        decision_type="approve",
+        confidence=0.3,
+        latency_ms=800,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_find_test",
+        },
+    )
+
+    alert = evaluate_event(event)
+
+    saved = repository.save(
+        alert=alert,
+        trace_id="trace_find_001",
+    )
+
+    result = repository.find_by_id(
+        alert_id=saved.alert_id,
+    )
+
+    assert result is not None
+    assert result["alert_id"] == saved.alert_id
+    assert result["trace_id"] == "trace_find_001"
+    assert result["event_id"] == alert.event_id
+    assert result["level"] == alert.level
+    assert result["risk_score"] == alert.risk_score
+    assert result["uncertainty_score"] == alert.uncertainty_score
+    assert result["human_required"] == int(alert.human_required)
+    assert result["reason_summary"] == alert.reason_summary
+    assert json.loads(result["metadata"]) == alert.metadata
+    assert result["created_at"] == saved.created_at
