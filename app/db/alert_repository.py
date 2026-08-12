@@ -18,7 +18,7 @@ class SavedAlert:
     created_at: str
 
 @dataclass(frozen=True)
-class StoredAlertDetail:
+class AlertDetail:
     alert_id: int
     trace_id: str
     created_at: str
