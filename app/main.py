@@ -9,13 +9,18 @@ from app.db.alert_repository import AlertRepository, PersistenceError
 from app.db.connection import init_db
 from app.services.evaluation_service import CoreValidationException, evaluate_request
 from app.utils.trace import generate_trace_id
-from app.schemas import EvaluateRequest
+from app.schemas import AlertDetailResponse, EvaluateRequest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATABASE_PATH = PROJECT_ROOT / "data" / "alert.db"
 
 def get_alert_repository() -> AlertRepository:
     return AlertRepository(DATABASE_PATH)
+
+class AlertNotFoundException(Exception):
+    def __init__(self, alert_id: int):
+        self.alert_id = alert_id
+        super().__init__(f"Alert not found: alert_id={alert_id}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -91,8 +96,36 @@ async def system_exception_handler(request: Request, exc: Exception):
         },
     )
 
+@app.exception_handler(AlertNotFoundException)
+async def alert_not_found_exception_handler(request: Request, exc: AlertNotFoundException):
+    trace_id = request.state.trace_id
+
+    return JSONResponse(
+        status_code=404,
+        headers={"X-Trace-ID": trace_id},
+        content={
+            "trace_id": trace_id,
+            "error_type": "alert_not_found",
+            "message": "Alert not found",
+            "details": [
+                {
+                    "alert_id": exc.alert_id,
+                }
+            ],
+        },
+    )
+
 @app.post("/evaluate")
 def evaluate_endpoint(payload: EvaluateRequest, request: Request, repository: AlertRepository = Depends(get_alert_repository)):
     trace_id = request.state.trace_id
 
     return evaluate_request(payload, trace_id, repository)
+
+@app.get("/alerts/{alert_id}", response_model=AlertDetailResponse)
+def get_alert_by_id_endpoint(alert_id: int, repository: AlertRepository = Depends(get_alert_repository))  -> AlertDetailResponse:
+    detail = repository.find_by_id(alert_id)
+
+    if detail is None:
+        raise AlertNotFoundException(alert_id)
+
+    return AlertDetailResponse.model_validate(detail)
