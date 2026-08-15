@@ -32,7 +32,6 @@ class AlertDetail:
     signals: list[Signal]
     metadata: dict[str, Any]
 
-
 class AlertRepository:
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = db_path
@@ -152,7 +151,7 @@ class AlertRepository:
         finally:
             connection.close()
 
-    def find_by_id(self, alert_id: int):
+    def find_by_id(self, alert_id: int) -> AlertDetail | None:
         connection = create_connection(self.db_path)
 
         try:
@@ -178,10 +177,190 @@ class AlertRepository:
             if alert_row is None:
                 return None
 
-            return alert_row
+            signal_rows = connection.execute(
+                """
+                SELECT
+                    rule_id,
+                    category,
+                    score,
+                    reason,
+                    evidence,
+                    is_critical_override,
+                    metadata
+                FROM alert_signals
+                WHERE alert_id = ?
+                ORDER BY signal_id
+                """,
+                (alert_id,),
+            ).fetchall()
 
-        except sqlite3.Error as exc:
+            signals = [
+                Signal(
+                    rule_id=signal_row["rule_id"],
+                    category=signal_row["category"],
+                    score=signal_row["score"],
+                    reason=signal_row["reason"],
+                    evidence=json.loads(signal_row["evidence"]),
+                    is_critical_override=bool(
+                        signal_row["is_critical_override"]
+                    ),
+                    metadata=json.loads(signal_row["metadata"]),
+                )
+                for signal_row in signal_rows
+            ]
+
+            action_rows = connection.execute(
+            """
+            SELECT action_code
+            FROM alert_actions
+            WHERE alert_id = ?
+            ORDER BY action_order
+            """,
+            (alert_id,),
+            ).fetchall()
+
+            recommended_actions = [
+                action_row["action_code"] for action_row in action_rows
+            ]
+
+            return AlertDetail(
+                alert_id=alert_row["alert_id"],
+                trace_id=alert_row["trace_id"],
+                created_at=alert_row["created_at"],
+                event_id=alert_row["event_id"],
+                level=alert_row["level"],
+                risk_score=alert_row["risk_score"],
+                uncertainty_score=alert_row["uncertainty_score"],
+                human_required=bool(
+                    alert_row["human_required"]
+                ),
+                recommended_actions=recommended_actions,
+                reason_summary=alert_row["reason_summary"],
+                signals=signals,
+                metadata=json.loads(alert_row["metadata"]),
+            )
+
+        except (sqlite3.Error, json.JSONDecodeError) as exc:
             raise PersistenceError("Failed to find alert by id") from exc
 
         finally:
             connection.close()
+
+    def find_recent(self, limit: int) -> list[AlertDetail]:
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+
+        connection = create_connection(self.db_path)
+
+        try:
+            alert_rows = connection.execute(
+                """
+                SELECT
+                    alert_id,
+                    trace_id,
+                    event_id,
+                    level,
+                    risk_score,
+                    uncertainty_score,
+                    human_required,
+                    reason_summary,
+                    metadata,
+                    created_at
+                FROM alerts
+                ORDER BY created_at DESC, alert_id DESC
+                LIMIT ?
+                """,
+                (limit,)
+            ).fetchall()
+
+            if not alert_rows:
+                return []
+
+            alert_ids = [alert_row["alert_id"] for alert_row in alert_rows]
+
+            signal_rows = connection.execute(
+                f"""
+                SELECT
+                    alert_id,
+                    rule_id,
+                    category,
+                    score,
+                    reason,
+                    evidence,
+                    is_critical_override,
+                    metadata
+                FROM alert_signals
+                WHERE alert_id IN ({", ".join("?" for _ in alert_ids)})
+                ORDER BY alert_id, signal_id
+                """,
+                alert_ids,
+            ).fetchall()
+
+            signals_by_alert_id: dict[int, list[Signal]] = {
+                alert_id: [] for alert_id in alert_ids
+            }
+
+            for signal_row in signal_rows:
+                signal = Signal(
+                        rule_id=signal_row["rule_id"],
+                        category=signal_row["category"],
+                        score=signal_row["score"],
+                        reason=signal_row["reason"],
+                        evidence=json.loads(signal_row["evidence"]),
+                        is_critical_override=bool(
+                            signal_row["is_critical_override"]
+                        ),
+                        metadata=json.loads(signal_row["metadata"]),
+                    )
+                signals_by_alert_id[signal_row["alert_id"]].append(signal)
+
+            action_rows = connection.execute(
+                f"""
+                SELECT 
+                    alert_id,
+                    action_code
+                FROM alert_actions
+                WHERE alert_id IN ({", ".join("?" for _ in alert_ids)})
+                ORDER BY alert_id, action_order
+                """,
+                alert_ids,
+            ).fetchall()
+
+            actions_by_alert_id: dict[int, list[str]] = {
+                alert_id: [] for alert_id in alert_ids
+            }
+
+            for action_row in action_rows:
+                actions_by_alert_id[action_row["alert_id"]].append(action_row["action_code"])
+
+            alert_details: list[AlertDetail] = []
+
+            for alert_row in alert_rows:
+                alert_id = alert_row["alert_id"]
+
+                detail = AlertDetail(
+                    alert_id=alert_id,
+                    trace_id=alert_row["trace_id"],
+                    created_at=alert_row["created_at"],
+                    event_id=alert_row["event_id"],
+                    level=alert_row["level"],
+                    risk_score=alert_row["risk_score"],
+                    uncertainty_score=alert_row["uncertainty_score"],
+                    human_required=bool(
+                        alert_row["human_required"]
+                    ),
+                    recommended_actions=actions_by_alert_id[alert_id],
+                    reason_summary=alert_row["reason_summary"],
+                    signals=signals_by_alert_id[alert_id],
+                    metadata=json.loads(alert_row["metadata"]),
+                )
+                alert_details.append(detail)
+
+            return alert_details
+
+        except (sqlite3.Error, json.JSONDecodeError) as exc:
+            raise PersistenceError("Failed to find recent alerts") from exc
+
+        finally:
+            connection.close()
+
