@@ -67,8 +67,6 @@ def test_evaluate_endpoint(test_db_path):
         database_created_at = datetime.fromisoformat(alert_row["created_at"])
 
         assert response_created_at == database_created_at
-
-        assert response_created_at == database_created_at
         assert alert_row["event_id"] == body["event_id"]
         assert alert_row["risk_score"] == body["risk_score"]
         assert alert_row["uncertainty_score"] == body["uncertainty_score"]
