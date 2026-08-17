@@ -31,7 +31,9 @@ class SignalResponse(BaseModel):
     metadata: dict[str, Any]
 
 class EvaluateResponse(BaseModel):
+    alert_id: int
     trace_id: str
+    created_at: datetime
     event_id: str
     level: str
     risk_score: int

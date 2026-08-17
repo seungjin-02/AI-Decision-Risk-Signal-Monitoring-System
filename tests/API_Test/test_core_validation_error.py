@@ -19,7 +19,7 @@ def test_confidence_pass_threshold(test_db_path):
     response = client.post("/evaluate", json=payload)
     body = response.json()
 
-    assert response.status_code == 200
+    assert response.status_code == 201
 
 def test_confidence_above_threshold(test_db_path):
     payload = {

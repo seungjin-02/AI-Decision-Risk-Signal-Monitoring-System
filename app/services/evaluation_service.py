@@ -1,6 +1,6 @@
 from typing import Any
 
-from app.db.alert_repository import AlertRepository
+from app.db.alert_repository import AlertRepository, SavedAlert
 from app.schemas import EvaluateRequest
 from core.step01_DecisionEvent import DecisionEvent
 from core.step05_SignalGeneration import Signal
@@ -34,8 +34,10 @@ def signal_to_response(signal: Signal) -> dict[str, Any]:
         "metadata": signal.metadata
     }
 
-def alert_to_response(alert: AlertOutput, trace_id: str) -> dict[str, Any]:
+def alert_to_response(alert: AlertOutput, trace_id: str, saved_alert: SavedAlert) -> dict[str, Any]:
     return {
+        "alert_id": saved_alert.alert_id,
+        "created_at": saved_alert.created_at,
         "trace_id": trace_id,
         "event_id": alert.event_id,
         "level": alert.level,
@@ -45,7 +47,7 @@ def alert_to_response(alert: AlertOutput, trace_id: str) -> dict[str, Any]:
         "recommended_actions": alert.recommended_actions,
         "reason_summary": alert.reason_summary,
         "signals": [signal_to_response(signal) for signal in alert.signals],
-        "metadata": alert.metadata
+        "metadata": alert.metadata,
     }
 
 def evaluate_request(payload: EvaluateRequest, trace_id: str, repository: AlertRepository) -> dict[str, Any]:
@@ -55,6 +57,6 @@ def evaluate_request(payload: EvaluateRequest, trace_id: str, repository: AlertR
     except ValueError as exc:
         raise CoreValidationException(str(exc)) from exc
 
-    repository.save(alert, trace_id)
+    saved_alert = repository.save(alert=alert, trace_id=trace_id)
 
-    return alert_to_response(alert, trace_id)
+    return alert_to_response(alert=alert, trace_id=trace_id, saved_alert=saved_alert)

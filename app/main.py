@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, Query, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -9,7 +9,7 @@ from app.db.alert_repository import AlertRepository, PersistenceError
 from app.db.connection import init_db
 from app.services.evaluation_service import CoreValidationException, evaluate_request
 from app.utils.trace import generate_trace_id
-from app.schemas import AlertDetailResponse, EvaluateRequest
+from app.schemas import AlertDetailResponse, EvaluateRequest, AlertListResponse, EvaluateResponse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATABASE_PATH = PROJECT_ROOT / "data" / "alert.db"
@@ -115,7 +115,7 @@ async def alert_not_found_exception_handler(request: Request, exc: AlertNotFound
         },
     )
 
-@app.post("/evaluate")
+@app.post("/evaluate", response_model=EvaluateResponse, status_code=status.HTTP_201_CREATED)
 def evaluate_endpoint(payload: EvaluateRequest, request: Request, repository: AlertRepository = Depends(get_alert_repository)):
     trace_id = request.state.trace_id
 
@@ -129,3 +129,15 @@ def get_alert_by_id_endpoint(alert_id: int, repository: AlertRepository = Depend
         raise AlertNotFoundException(alert_id)
 
     return AlertDetailResponse.model_validate(detail)
+
+@app.get("/alerts", response_model=AlertListResponse)
+def get_recent_alerts_endpoint(limit: int = Query(default=5, ge=1, le=100), repository: AlertRepository = Depends(get_alert_repository)) -> AlertListResponse:
+    details = repository.find_recent(limit=limit)
+
+    alerts = [AlertDetailResponse.model_validate(detail) for detail in details]
+
+    return AlertListResponse(
+        count=len(alerts),
+        limit=limit,
+        alerts=alerts,
+    )
