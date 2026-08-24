@@ -2,6 +2,8 @@ import json
 import sqlite3
 import pytest
 
+from datetime import datetime
+
 from app.db.alert_repository import AlertDetail, PersistenceError
 from app.db.connection import create_connection
 from core.main import evaluate_event
@@ -270,26 +272,26 @@ def test_find_by_id_returns_existing_alert(repository):
         assert isinstance(signal.evidence, dict)
         assert isinstance(signal.metadata, dict)
 
-def test_find_recent_returns_empty_list_when_database_is_empty(repository):
-    results = repository.find_recent(limit=10)
+def test_search_returns_empty_list_when_database_is_empty(repository):
+    results = repository.search(limit=10)
 
     assert results == []
 
-def test_find_recent_out_of_limit_range_raise_value_error(repository):
+def test_search_out_of_limit_range_raise_value_error(repository):
     for invalid_limit in 0, 101:
         with pytest.raises(ValueError, match="limit must be between 1 and 100"):
-            repository.find_recent(limit=invalid_limit)
+            repository.search(limit=invalid_limit)
 
-def test_find_recent_applies_limit_and_preserves_alert_details(repository):
+def test_search_applies_limit_and_preserves_alert_details(repository):
     first_event = DecisionEvent(
-        event_id="event_find_recent_001",
+        event_id="event_search_001",
         decision_type="approve",
         confidence=0.3,
         latency_ms=800,
         model_version="v1",
         error_code=None,
         metadata={
-            "source": "repository_find_test1",
+            "source": "repository_search_test1",
         },
     )
 
@@ -297,18 +299,18 @@ def test_find_recent_applies_limit_and_preserves_alert_details(repository):
 
     first_saved = repository.save(
         alert=first_alert,
-        trace_id="trace_find_recent_001",
+        trace_id="trace_search_001",
     )
 
     second_event = DecisionEvent(
-        event_id="event_find_recent_002",
+        event_id="event_search_002",
         decision_type="approve",
         confidence=0.8,
         latency_ms=1800,
         model_version="v2",
         error_code=None,
         metadata={
-            "source": "repository_find_test2",
+            "source": "repository_search_test2",
         },
     )
 
@@ -316,17 +318,17 @@ def test_find_recent_applies_limit_and_preserves_alert_details(repository):
 
     second_saved = repository.save(
         alert=second_alert,
-        trace_id="trace_find_recent_002",
+        trace_id="trace_search_002",
     )
 
-    result_by_one = repository.find_recent(limit=1)
+    result_by_one = repository.search(limit=1)
 
     assert len(result_by_one) == 1
 
     result = result_by_one[0]
 
     assert result.alert_id == second_saved.alert_id
-    assert result.trace_id == "trace_find_recent_002"
+    assert result.trace_id == "trace_search_002"
     assert result.event_id == second_alert.event_id
     assert result.level == second_alert.level
     assert result.risk_score == second_alert.risk_score
@@ -338,7 +340,7 @@ def test_find_recent_applies_limit_and_preserves_alert_details(repository):
     assert result.recommended_actions == second_alert.recommended_actions
     assert result.signals == second_alert.signals
 
-    result_by_two = repository.find_recent(limit=2)
+    result_by_two = repository.search(limit=2)
 
     assert len(result_by_two) == 2
 
@@ -350,3 +352,363 @@ def test_find_recent_applies_limit_and_preserves_alert_details(repository):
     assert recent_result.recommended_actions == second_alert.recommended_actions
     assert older_result.signals == first_alert.signals
     assert older_result.recommended_actions == first_alert.recommended_actions
+
+def test_search_filters_by_level(repository):
+    info_event = DecisionEvent(
+        event_id="event_search_level_info",
+        decision_type="approve",
+        confidence=0.95,
+        latency_ms=300,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_search_level_test",
+        },
+    )
+
+    info_alert = evaluate_event(info_event)
+
+    assert info_alert.level == "INFO"
+
+    info_saved = repository.save(
+        alert=info_alert,
+        trace_id="trace_search_level_info",
+    )
+
+    critical_event = DecisionEvent(
+        event_id="event_search_level_critical",
+        decision_type="approve",
+        confidence=0.3,
+        latency_ms=2800,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_search_level_test",
+        },
+    )
+
+    critical_alert = evaluate_event(critical_event)
+
+    assert critical_alert.level == "CRITICAL"
+
+    critical_saved = repository.save(
+        alert=critical_alert,
+        trace_id="trace_search_level_critical",
+    )
+
+    results = repository.search(
+        limit=10,
+        level="CRITICAL",
+    )
+
+    assert [result.alert_id for result in results] == [critical_saved.alert_id]
+
+def test_search_filters_by_human_required(repository):
+    not_required_event = DecisionEvent(
+        event_id="event_search_human_not_required",
+        decision_type="approve",
+        confidence=0.95,
+        latency_ms=300,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_search_human_test",
+        },
+    )
+
+    not_required_alert = evaluate_event(
+        not_required_event
+    )
+
+    assert not_required_alert.human_required is False
+
+    not_required_saved = repository.save(
+        alert=not_required_alert,
+        trace_id="trace_search_human_not_required",
+    )
+
+    required_event = DecisionEvent(
+        event_id="event_search_human_required",
+        decision_type="approve",
+        confidence=0.3,
+        latency_ms=2800,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_search_human_test",
+        },
+    )
+
+    required_alert = evaluate_event(required_event)
+
+    assert required_alert.human_required is True
+
+    required_saved = repository.save(
+        alert=required_alert,
+        trace_id="trace_search_human_required",
+    )
+
+    required_results = repository.search(
+        limit=10,
+        human_required=True,
+    )
+
+    assert [result.alert_id for result in required_results] == [required_saved.alert_id]
+
+    not_required_results = repository.search(
+        limit=10,
+        human_required=False,
+    )
+
+    assert [result.alert_id for result in not_required_results] == [not_required_saved.alert_id]
+
+def test_search_filters_by_created_at_range(repository, test_db_path):
+    event = DecisionEvent(
+        event_id="event_search_created_at",
+        decision_type="approve",
+        confidence=0.95,
+        latency_ms=300,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_search_time_test",
+        },
+    )
+
+    alert = evaluate_event(event)
+
+    before_saved = repository.save(
+        alert=alert,
+        trace_id="trace_search_time_before",
+    )
+
+    start_saved = repository.save(
+        alert=alert,
+        trace_id="trace_search_time_start",
+    )
+
+    end_saved = repository.save(
+        alert=alert,
+        trace_id="trace_search_time_end",
+    )
+
+    connection = create_connection(test_db_path)
+
+    try:
+        timestamps = [
+            (
+                "2026-08-20T04:00:00+00:00",
+                before_saved.alert_id,
+            ),
+            (
+                "2026-08-20T05:00:00+00:00",
+                start_saved.alert_id,
+            ),
+            (
+                "2026-08-20T06:00:00+00:00",
+                end_saved.alert_id,
+            ),
+        ]
+
+        for created_at, alert_id in timestamps:
+            connection.execute(
+                """
+                UPDATE alerts
+                SET created_at = ?
+                WHERE alert_id = ?
+                """,
+                (
+                    created_at,
+                    alert_id,
+                ),
+            )
+
+        connection.commit()
+
+    finally:
+        connection.close()
+
+    created_from = datetime.fromisoformat(
+        "2026-08-20T14:00:00+09:00"
+    )
+
+    created_to = datetime.fromisoformat(
+        "2026-08-20T15:00:00+09:00"
+    )
+
+    results = repository.search(
+        limit=10,
+        created_from=created_from,
+        created_to=created_to,
+    )
+
+    assert [result.alert_id for result in results] == [start_saved.alert_id]
+
+    from_only_results = repository.search(
+        limit=10,
+        created_from=created_from,
+    )
+
+    assert [result.alert_id for result in from_only_results] == [end_saved.alert_id, start_saved.alert_id]
+
+    to_only_results = repository.search(
+        limit=10,
+        created_to=created_to,
+    )
+
+    assert [result.alert_id for result in to_only_results] == [start_saved.alert_id, before_saved.alert_id]
+
+def test_search_combines_filters(repository):
+    warn_required_event = DecisionEvent(
+        event_id="event_search_and_warn_required",
+        decision_type="approve",
+        confidence=0.3,
+        latency_ms=800,
+        model_version=" ",
+        error_code=None,
+        metadata={
+            "source": "repository_search_and_test",
+        },
+    )
+
+    warn_required_alert = evaluate_event(warn_required_event)
+
+    assert warn_required_alert.level == "WARN"
+    assert warn_required_alert.human_required is True
+
+    warn_required_saved = repository.save(
+        alert=warn_required_alert,
+        trace_id="trace_search_and_warn_required",
+    )
+
+    warn_not_required_event = DecisionEvent(
+        event_id="event_search_and_warn_not_required",
+        decision_type="approve",
+        confidence=0.3,
+        latency_ms=800,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_search_and_test",
+        },
+    )
+
+    warn_not_required_alert = evaluate_event(warn_not_required_event)
+
+    assert warn_not_required_alert.level == "WARN"
+    assert warn_not_required_alert.human_required is False
+
+    warn_not_required_saved = repository.save(
+        alert=warn_not_required_alert,
+        trace_id=(
+            "trace_search_and_warn_not_required"
+        ),
+    )
+
+    critical_required_event = DecisionEvent(
+        event_id="event_search_and_critical_required",
+        decision_type="approve",
+        confidence=0.3,
+        latency_ms=2800,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_search_and_test",
+        },
+    )
+
+    critical_required_alert = evaluate_event(critical_required_event)
+
+    assert critical_required_alert.level == "CRITICAL"
+    assert critical_required_alert.human_required is True
+
+    critical_required_saved = repository.save(
+        alert=critical_required_alert,
+        trace_id=(
+            "trace_search_and_critical_required"
+        ),
+    )
+
+    results = repository.search(
+        limit=10,
+        level="WARN",
+        human_required=True,
+    )
+
+    result_ids = [result.alert_id for result in results]
+
+    assert result_ids == [warn_required_saved.alert_id]
+    assert warn_not_required_saved.alert_id not in result_ids
+    assert critical_required_saved.alert_id not in result_ids
+
+def test_search_rejects_invalid_level(repository):
+    with pytest.raises(
+        ValueError,
+        match="level must be INFO, WARN, CRITICAL",
+    ):
+        repository.search(
+            limit=5,
+            level="UNKNOWN",
+        )
+
+def test_search_rejects_datetime_without_timezone(repository):
+    naive_datetime = datetime.fromisoformat(
+        "2026-08-20T05:00:00"
+    )
+
+    assert naive_datetime.tzinfo is None
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "created_from and created_to "
+            "must include timezone"
+        ),
+    ):
+        repository.search(
+            limit=5,
+            created_from=naive_datetime,
+        )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "created_from and created_to "
+            "must include timezone"
+        ),
+    ):
+        repository.search(
+            limit=5,
+            created_to=naive_datetime,
+        )
+
+def test_search_rejects_invalid_created_at_range(repository):
+    same_time = datetime.fromisoformat(
+        "2026-08-20T05:00:00+00:00"
+    )
+
+    earlier_time = datetime.fromisoformat(
+        "2026-08-20T04:00:00+00:00"
+    )
+
+    later_time = datetime.fromisoformat(
+        "2026-08-20T06:00:00+00:00"
+    )
+
+    invalid_ranges = [
+        (same_time, same_time),
+        (later_time, earlier_time)
+    ]
+
+    for created_from, created_to in invalid_ranges:
+        with pytest.raises(
+            ValueError,
+            match=(
+                "created_from must be earlier than created_to"
+            ),
+        ):
+            repository.search(
+                limit=5,
+                created_from=created_from,
+                created_to=created_to
+            )

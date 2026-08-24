@@ -246,15 +246,70 @@ class AlertRepository:
         finally:
             connection.close()
 
-    def find_recent(self, limit: int) -> list[AlertDetail]:
+    def search(
+            self,
+            limit: int,
+            level: str | None = None,
+            human_required: bool | None = None,
+            created_from: datetime | None = None,
+            created_to: datetime | None = None
+    ) -> list[AlertDetail]:
+
         if not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
+
+        if level is not None and level not in {"INFO", "WARN", "CRITICAL"}:
+            raise ValueError("level must be INFO, WARN, CRITICAL")
+
+        for value in (created_from, created_to):
+            if value is not None and (value.tzinfo is None or value.utcoffset() is None): # 시간대 정보 x or 시간대 계산 x인 경우
+                raise ValueError("created_from and created_to must include timezone")
+
+        if created_from is not None and created_to is not None and created_from >= created_to:
+            raise ValueError("created_from must be earlier than created_to")
+
+        # TEXT로 받은 시간대 -> UTC기준으로 변환 -> 문자열 변환(isoformat())
+        created_from_utc = (
+            created_from.astimezone(timezone.utc).isoformat()
+            if created_from is not None else None
+        )
+
+        created_to_utc = (
+            created_to.astimezone(timezone.utc).isoformat()
+            if created_to is not None else None
+        )
+
+        conditions: list[str] = []
+        values: list[Any] = []
+
+        if level is not None:
+            conditions.append("level = ?")
+            values.append(level)
+
+        if human_required is not None:
+            conditions.append("human_required = ?")
+            values.append(int(human_required))
+
+        if created_from_utc is not None:
+            conditions.append("created_at >= ?")
+            values.append(created_from_utc)
+
+        if created_to_utc is not None:
+            conditions.append("created_at < ?")
+            values.append(created_to_utc)
+
+        where_clause = ""
+
+        if conditions:
+            where_clause = ("WHERE " + " AND ".join(conditions))
+
+        values.append(limit)
 
         connection = create_connection(self.db_path)
 
         try:
             alert_rows = connection.execute(
-                """
+                f"""
                 SELECT
                     alert_id,
                     trace_id,
@@ -267,16 +322,19 @@ class AlertRepository:
                     metadata,
                     created_at
                 FROM alerts
+                {where_clause}
                 ORDER BY created_at DESC, alert_id DESC
                 LIMIT ?
                 """,
-                (limit,)
+                values,
             ).fetchall()
 
             if not alert_rows:
                 return []
 
             alert_ids = [alert_row["alert_id"] for alert_row in alert_rows]
+
+            placeholders = ", ".join("?" for _ in alert_ids)
 
             signal_rows = connection.execute(
                 f"""
@@ -290,7 +348,7 @@ class AlertRepository:
                     is_critical_override,
                     metadata
                 FROM alert_signals
-                WHERE alert_id IN ({", ".join("?" for _ in alert_ids)})
+                WHERE alert_id IN ({placeholders})
                 ORDER BY alert_id, signal_id
                 """,
                 alert_ids,
@@ -302,25 +360,24 @@ class AlertRepository:
 
             for signal_row in signal_rows:
                 signal = Signal(
-                        rule_id=signal_row["rule_id"],
-                        category=signal_row["category"],
-                        score=signal_row["score"],
-                        reason=signal_row["reason"],
-                        evidence=json.loads(signal_row["evidence"]),
-                        is_critical_override=bool(
-                            signal_row["is_critical_override"]
-                        ),
-                        metadata=json.loads(signal_row["metadata"]),
-                    )
+                    rule_id=signal_row["rule_id"],
+                    category=signal_row["category"],
+                    score=signal_row["score"],
+                    reason=signal_row["reason"],
+                    evidence=json.loads(signal_row["evidence"]),
+                    is_critical_override=bool(signal_row["is_critical_override"]),
+                    metadata=json.loads(signal_row["metadata"])
+                )
+
                 signals_by_alert_id[signal_row["alert_id"]].append(signal)
 
             action_rows = connection.execute(
                 f"""
-                SELECT 
+                SELECT
                     alert_id,
                     action_code
                 FROM alert_actions
-                WHERE alert_id IN ({", ".join("?" for _ in alert_ids)})
+                WHERE alert_id IN ({placeholders})
                 ORDER BY alert_id, action_order
                 """,
                 alert_ids,
@@ -346,20 +403,19 @@ class AlertRepository:
                     level=alert_row["level"],
                     risk_score=alert_row["risk_score"],
                     uncertainty_score=alert_row["uncertainty_score"],
-                    human_required=bool(
-                        alert_row["human_required"]
-                    ),
+                    human_required=bool(alert_row["human_required"]),
                     recommended_actions=actions_by_alert_id[alert_id],
                     reason_summary=alert_row["reason_summary"],
                     signals=signals_by_alert_id[alert_id],
-                    metadata=json.loads(alert_row["metadata"]),
+                    metadata=json.loads(alert_row["metadata"])
                 )
+
                 alert_details.append(detail)
 
             return alert_details
 
         except (sqlite3.Error, json.JSONDecodeError) as exc:
-            raise PersistenceError("Failed to find recent alerts") from exc
+            raise PersistenceError("Failed to search alerts") from exc
 
         finally:
             connection.close()

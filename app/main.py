@@ -1,3 +1,4 @@
+from typing import Literal
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -131,8 +132,16 @@ def get_alert_by_id_endpoint(alert_id: int, repository: AlertRepository = Depend
     return AlertDetailResponse.model_validate(detail)
 
 @app.get("/alerts", response_model=AlertListResponse)
-def get_recent_alerts_endpoint(limit: int = Query(default=5, ge=1, le=100), repository: AlertRepository = Depends(get_alert_repository)) -> AlertListResponse:
-    details = repository.find_recent(limit=limit)
+def get_alerts_endpoint(
+        limit: int = Query(default=5, ge=1, le=100),
+        level: Literal["INFO", "WARN", "CRITICAL"] | None = Query(default=None),
+        human_required: bool | None = Query(default=None),
+        repository: AlertRepository = Depends(get_alert_repository)) -> AlertListResponse:
+    details = repository.search(
+        limit=limit,
+        level=level,
+        human_required=human_required
+    )
 
     alerts = [AlertDetailResponse.model_validate(detail) for detail in details]
 
