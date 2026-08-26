@@ -1,6 +1,7 @@
 from datetime import datetime
 from fastapi.testclient import TestClient
 from app.db.alert_repository import AlertRepository
+from app.db.connection import create_connection
 from app.main import app
 from core.main import evaluate_event
 from core.step01_DecisionEvent import DecisionEvent
@@ -113,7 +114,7 @@ def test_get_alert_by_id_returns_404_when_alert_does_not_exist(test_db_path):
 
     assert body["trace_id"] == response.headers["x-trace-id"]
 
-def test_get_recent_alerts_returns_empty_list(test_db_path):
+def test_get_search_alerts_returns_empty_list(test_db_path):
     response = client.get("/alerts")
 
     assert response.status_code == 200
@@ -125,7 +126,7 @@ def test_get_recent_alerts_returns_empty_list(test_db_path):
         "alerts": [],
     }
 
-def test_get_recent_alerts_returns_alerts_in_recent_order(test_db_path):
+def test_get_search_alerts_returns_alerts_in_search_order(test_db_path):
     repository = AlertRepository(test_db_path)
 
     first_event = DecisionEvent(
@@ -200,7 +201,142 @@ def test_get_recent_alerts_returns_alerts_in_recent_order(test_db_path):
     assert len(limited_body["alerts"]) == 1
     assert limited_body["alerts"][0]["alert_id"] == second_saved.alert_id
 
-def test_get_recent_alerts_rejects_invalid_limit():
+def test_get_alerts_applies_level_and_human_required_filters(test_db_path):
+    repository = AlertRepository(test_db_path)
+
+    warn_without_human_event = DecisionEvent(
+        event_id="event_api_search_warn_without_human",
+        decision_type="approve",
+        confidence=0.3,
+        latency_ms=800,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "api_search_filter_test",
+        },
+    )
+
+    warn_without_human_alert = evaluate_event(warn_without_human_event)
+
+    assert warn_without_human_alert.level == "WARN"
+    assert warn_without_human_alert.human_required is False
+
+    warn_without_human_saved = repository.save(
+        alert=warn_without_human_alert,
+        trace_id="trace_api_search_warn_without_human",
+    )
+
+    warn_with_human_event = DecisionEvent(
+        event_id="event_api_search_warn_with_human",
+        decision_type="approve",
+        confidence=0.3,
+        latency_ms=800,
+        model_version=" ",
+        error_code=None,
+        metadata={
+            "source": "api_search_filter_test",
+        },
+    )
+
+    warn_with_human_alert = evaluate_event(warn_with_human_event)
+
+    assert warn_with_human_alert.level == "WARN"
+    assert warn_with_human_alert.human_required is True
+
+    repository.save(
+        alert=warn_with_human_alert,
+        trace_id="trace_api_search_warn_with_human",
+    )
+
+    response = client.get("/alerts?level=WARN&human_required=false")
+
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["count"] == 1
+    assert body["limit"] == 5
+    assert len(body["alerts"]) == 1
+
+    result = body["alerts"][0]
+
+    assert result["alert_id"] == warn_without_human_saved.alert_id
+    assert result["level"] == "WARN"
+    assert result["human_required"] is False
+
+def test_get_alerts_applies_created_at_range(test_db_path):
+    repository = AlertRepository(test_db_path)
+
+    event = DecisionEvent(
+        event_id="event_api_search_created_at",
+        decision_type="approve",
+        confidence=0.95,
+        latency_ms=300,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "api_search_created_at_test",
+        },
+    )
+
+    alert = evaluate_event(event)
+
+    outside_saved = repository.save(
+        alert=alert,
+        trace_id="trace_api_search_created_at_outside",
+    )
+
+    inside_saved = repository.save(
+        alert=alert,
+        trace_id="trace_api_search_created_at_inside",
+    )
+
+    connection = create_connection(test_db_path)
+
+    try:
+        timestamps = [
+            (
+                "2026-08-20T04:00:00+00:00",
+                outside_saved.alert_id,
+            ),
+            (
+                "2026-08-20T05:00:00+00:00",
+                inside_saved.alert_id,
+            ),
+        ]
+
+        for created_at, alert_id in timestamps:
+            connection.execute(
+                """
+                UPDATE alerts
+                SET created_at = ?
+                WHERE alert_id = ?
+                """,
+                (
+                    created_at,
+                    alert_id,
+                ),
+            )
+
+        connection.commit()
+
+    finally:
+        connection.close()
+
+    response = client.get("/alerts", params={"created_from": "2026-08-20T14:00:00+09:00", "created_to": "2026-08-20T15:00:00+09:00"})
+
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["count"] == 1
+    assert body["limit"] == 5
+    assert len(body["alerts"]) == 1
+
+    result = body["alerts"][0]
+
+    assert result["alert_id"] == inside_saved.alert_id
+    assert result["trace_id"] == "trace_api_search_created_at_inside"
+
+def test_get_search_alerts_rejects_invalid_limit():
     for invalid_limit in (0, 101, "abc"):
         response = client.get(f"/alerts?limit={invalid_limit}")
 
@@ -210,3 +346,53 @@ def test_get_recent_alerts_rejects_invalid_limit():
         assert body["error_type"] == "api_validation_error"
         assert body["trace_id"] == response.headers["x-trace-id"]
         assert body["details"]
+
+def test_get_alerts_rejects_invalid_level(test_db_path):
+    response = client.get("/alerts?level=UNKNOWN")
+
+    body = response.json()
+
+    assert response.status_code == 422
+    assert response.headers["x-trace-id"]
+    assert body["error_type"] == "api_validation_error"
+
+def test_get_alerts_rejects_invalid_human_required(test_db_path):
+    response = client.get("/alerts?human_required=UNKNOWN")
+    body = response.json()
+
+    assert response.status_code == 422
+    assert response.headers["x-trace-id"]
+    assert body["error_type"] == "api_validation_error"
+
+def test_get_alerts_rejects_datetime_without_timezone(test_db_path):
+    for field_name in ("created_from", "created_to"):
+        response = client.get("/alerts",  params={field_name: "2026-08-20T05:00:00"})
+
+        body = response.json()
+
+        assert response.status_code == 422
+        assert body["error_type"] == "api_validation_error"
+        assert body["trace_id"] == response.headers["x-trace-id"]
+        assert body["details"]
+
+def test_get_alerts_rejects_invalid_created_at_range(test_db_path):
+    invalid_ranges = [
+        (
+            "2026-08-20T05:00:00Z",
+            "2026-08-20T05:00:00Z",
+        ),
+        (
+            "2026-08-20T06:00:00Z",
+            "2026-08-20T05:00:00Z",
+        ),
+    ]
+
+    for created_from, created_to in invalid_ranges:
+        response = client.get("/alerts", params={"created_from": created_from, "created_to": created_to})
+
+        body = response.json()
+
+        assert response.status_code == 422
+        assert body["error_type"] == "api_validation_error"
+        assert body["trace_id"] == response.headers["x-trace-id"]
+        assert any("created_from must be earlier than created_to" in detail["msg"] for detail in body["details"])

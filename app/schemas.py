@@ -1,5 +1,11 @@
-from typing import Any
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Literal
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    model_validator
+)
 from datetime import datetime
 
 class EvaluateRequest(BaseModel):
@@ -43,6 +49,20 @@ class EvaluateResponse(BaseModel):
     reason_summary: str
     signals: list[SignalResponse]
     metadata: dict[str, Any]
+
+class AlertSearchQuery(BaseModel):
+    limit: int = Field(default=5, ge=1, le=100)
+    level: Literal["INFO", "WARN", "CRITICAL"] | None = None
+    human_required: bool | None = None
+    created_from: AwareDatetime | None = None
+    created_to: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def validate_created_at_range(self) -> "AlertSearchQuery":
+        if self.created_from is not None and self.created_to is not None and self.created_from >= self.created_to:
+            raise ValueError("created_from must be earlier than created_to")
+
+        return self
 
 class AlertDetailResponse(BaseModel):
     # 딕셔너리 키가 아니라 객체 속성(detail.alert_id 등)에서 필드 값을 읽는다.

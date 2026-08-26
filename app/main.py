@@ -1,16 +1,17 @@
-from typing import Literal
+from typing import Annotated
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Depends, Query, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 
 from app.db.alert_repository import AlertRepository, PersistenceError
 from app.db.connection import init_db
 from app.services.evaluation_service import CoreValidationException, evaluate_request
 from app.utils.trace import generate_trace_id
-from app.schemas import AlertDetailResponse, EvaluateRequest, AlertListResponse, EvaluateResponse
+from app.schemas import AlertDetailResponse, AlertListResponse, AlertSearchQuery, EvaluateRequest, EvaluateResponse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATABASE_PATH = PROJECT_ROOT / "data" / "alert.db"
@@ -45,12 +46,14 @@ async def api_validation_exception_handler(request: Request, exc: RequestValidat
 
     return JSONResponse(
         status_code=422,
-        content={
-            "trace_id": trace_id,
-            "error_type": "api_validation_error",
-            "message": "Request format or type is invalid.",
-            "details": exc.errors(),
-        }
+        content=jsonable_encoder(
+            {
+                "trace_id": trace_id,
+                "error_type": "api_validation_error",
+                "message": "Request format or type is invalid.",
+                "details": exc.errors(),
+            }
+        ),
     )
 
 @app.exception_handler(CoreValidationException)
@@ -132,21 +135,19 @@ def get_alert_by_id_endpoint(alert_id: int, repository: AlertRepository = Depend
     return AlertDetailResponse.model_validate(detail)
 
 @app.get("/alerts", response_model=AlertListResponse)
-def get_alerts_endpoint(
-        limit: int = Query(default=5, ge=1, le=100),
-        level: Literal["INFO", "WARN", "CRITICAL"] | None = Query(default=None),
-        human_required: bool | None = Query(default=None),
-        repository: AlertRepository = Depends(get_alert_repository)) -> AlertListResponse:
+def get_alerts_endpoint(search_query: Annotated[AlertSearchQuery, Query()], repository: AlertRepository = Depends(get_alert_repository)) -> AlertListResponse:
     details = repository.search(
-        limit=limit,
-        level=level,
-        human_required=human_required
+        limit=search_query.limit,
+        level=search_query.level,
+        human_required=search_query.human_required,
+        created_from=search_query.created_from,
+        created_to=search_query.created_to
     )
 
     alerts = [AlertDetailResponse.model_validate(detail) for detail in details]
 
     return AlertListResponse(
         count=len(alerts),
-        limit=limit,
-        alerts=alerts,
+        limit=search_query.limit,
+        alerts=alerts
     )
