@@ -4,7 +4,7 @@ import pytest
 
 from datetime import datetime
 
-from app.db.alert_repository import AlertDetail, PersistenceError
+from app.db.alert_repository import PersistenceError
 from app.db.connection import create_connection
 from core.main import evaluate_event
 from core.step01_DecisionEvent import DecisionEvent
@@ -712,3 +712,243 @@ def test_search_rejects_invalid_created_at_range(repository):
                 created_from=created_from,
                 created_to=created_to
             )
+
+def test_search_uses_created_at_and_alert_id_cursor(repository, test_db_path):
+    event = DecisionEvent(
+        event_id="event_repository_cursor",
+        decision_type="approve",
+        confidence=0.95,
+        latency_ms=300,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_cursor_test",
+        },
+    )
+
+    alert = evaluate_event(event)
+
+    saved_alerts = [
+        repository.save(
+            alert=alert,
+            trace_id=f"trace_repository_cursor_{number}",
+        )
+        for number in range(1, 5)
+    ]
+
+    connection = create_connection(test_db_path)
+
+    try:
+        timestamps = [
+            (
+                "2026-08-20T06:00:00+00:00",
+                saved_alerts[0].alert_id,
+            ),
+            (
+                "2026-08-20T04:00:00+00:00",
+                saved_alerts[1].alert_id,
+            ),
+            (
+                "2026-08-20T05:00:00+00:00",
+                saved_alerts[2].alert_id,
+            ),
+            (
+                "2026-08-20T05:00:00+00:00",
+                saved_alerts[3].alert_id,
+            ),
+        ]
+
+        for created_at, alert_id in timestamps:
+            connection.execute(
+                """
+                UPDATE alerts
+                SET created_at = ?
+                WHERE alert_id = ?
+                """,
+                (created_at,alert_id)
+            )
+
+        connection.commit()
+
+    finally:
+        connection.close()
+
+    first_page = repository.search(limit=2)
+
+    assert [result.alert_id for result in first_page] == [saved_alerts[0].alert_id, saved_alerts[3].alert_id]
+
+    second_page = repository.search(
+        limit=2,
+        cursor_created_at=datetime.fromisoformat("2026-08-20T05:00:00+00:00"),
+        cursor_alert_id=saved_alerts[3].alert_id,
+    )
+
+    assert [result.alert_id for result in second_page] == [saved_alerts[2].alert_id, saved_alerts[1].alert_id]
+
+def test_search_rejects_partial_cursor(repository):
+    cursor_created_at = datetime.fromisoformat(
+        "2026-08-20T05:00:00+00:00"
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="cursor_created_at and cursor_alert_id must be provided together"
+    ):
+        repository.search(
+            limit=2,
+            cursor_created_at=cursor_created_at,
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="cursor_created_at and cursor_alert_id must be provided together"):
+        repository.search(
+            limit=2,
+            cursor_alert_id=4,
+        )
+
+def test_search_rejects_cursor_datetime_without_timezone(repository):
+    cursor_created_at = datetime.fromisoformat(
+        "2026-08-20T05:00:00"
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="cursor_created_at must include timezone",
+    ):
+        repository.search(
+            limit=2,
+            cursor_created_at=cursor_created_at,
+            cursor_alert_id=4,
+        )
+
+def test_search_rejects_non_positive_cursor_alert_id(repository):
+    cursor_created_at = datetime.fromisoformat(
+        "2026-08-20T05:00:00+00:00"
+    )
+
+    for invalid_cursor_alert_id in (0, -1):
+        with pytest.raises(
+            ValueError,
+            match="cursor_alert_id must be greater than 0"
+        ):
+            repository.search(
+                limit=2,
+                cursor_created_at=cursor_created_at,
+                cursor_alert_id=invalid_cursor_alert_id,
+            )
+
+def test_search_combines_level_filter_and_cursor(repository, test_db_path):
+    info_event = DecisionEvent(
+        event_id="event_search_cursor_info",
+        decision_type="approve",
+        confidence=0.95,
+        latency_ms=300,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_cursor_filter_test",
+        }
+    )
+
+    info_alert = evaluate_event(info_event)
+
+    assert info_alert.level == "INFO"
+
+    critical_event = DecisionEvent(
+        event_id="event_search_cursor_critical",
+        decision_type="approve",
+        confidence=0.3,
+        latency_ms=2800,
+        model_version="v1",
+        error_code=None,
+        metadata={
+            "source": "repository_cursor_filter_test",
+        },
+    )
+
+    critical_alert = evaluate_event(critical_event)
+
+    assert critical_alert.level == "CRITICAL"
+
+    info_old_saved = repository.save(
+        alert=info_alert,
+        trace_id="trace_cursor_filter_info_old",
+    )
+
+    critical_saved = repository.save(
+        alert=critical_alert,
+        trace_id="trace_cursor_filter_critical",
+    )
+
+    info_cursor_saved = repository.save(
+        alert=info_alert,
+        trace_id="trace_cursor_filter_info_cursor",
+    )
+
+    info_new_saved = repository.save(
+        alert=info_alert,
+        trace_id="trace_cursor_filter_info_new",
+    )
+
+    connection = create_connection(test_db_path)
+
+    try:
+        timestamps = [
+            (
+                "2026-08-20T04:00:00+00:00",
+                info_old_saved.alert_id,
+            ),
+            (
+                "2026-08-20T04:30:00+00:00",
+                critical_saved.alert_id,
+            ),
+            (
+                "2026-08-20T05:00:00+00:00",
+                info_cursor_saved.alert_id,
+            ),
+            (
+                "2026-08-20T06:00:00+00:00",
+                info_new_saved.alert_id,
+            ),
+        ]
+
+        for created_at, alert_id in timestamps:
+            connection.execute(
+                """
+                UPDATE alerts
+                SET created_at = ?
+                WHERE alert_id = ?
+                """,
+                (
+                    created_at,
+                    alert_id,
+                ),
+            )
+
+        connection.commit()
+
+    finally:
+        connection.close()
+
+    first_page = repository.search(
+        limit=2,
+        level="INFO",
+    )
+
+    assert [result.alert_id for result in first_page] == [info_new_saved.alert_id, info_cursor_saved.alert_id]
+
+    second_page = repository.search(
+        limit=2,
+        level="INFO",
+        cursor_created_at=datetime.fromisoformat(
+            "2026-08-20T05:00:00+00:00"
+        ),
+        cursor_alert_id=info_cursor_saved.alert_id,
+    )
+
+    second_page_ids = [result.alert_id for result in second_page]
+
+    assert second_page_ids == [info_old_saved.alert_id]
+
+    assert critical_saved.alert_id not in second_page_ids

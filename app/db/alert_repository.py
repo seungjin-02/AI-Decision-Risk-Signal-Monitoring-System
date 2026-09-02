@@ -252,7 +252,9 @@ class AlertRepository:
             level: str | None = None,
             human_required: bool | None = None,
             created_from: datetime | None = None,
-            created_to: datetime | None = None
+            created_to: datetime | None = None,
+            cursor_created_at: datetime | None = None,
+            cursor_alert_id: int | None = None
     ) -> list[AlertDetail]:
 
         if not 1 <= limit <= 100:
@@ -260,6 +262,21 @@ class AlertRepository:
 
         if level is not None and level not in {"INFO", "WARN", "CRITICAL"}:
             raise ValueError("level must be INFO, WARN, CRITICAL")
+
+        if (cursor_created_at is None) != (cursor_alert_id is None):
+            raise ValueError(
+                "cursor_created_at and cursor_alert_id must be provided together"
+            )
+
+        if cursor_created_at is not None and (cursor_created_at.tzinfo is None or cursor_created_at.utcoffset() is None):
+            raise ValueError(
+                "cursor_created_at must include timezone"
+            )
+
+        if cursor_alert_id is not None and cursor_alert_id <= 0:
+            raise ValueError(
+                "cursor_alert_id must be greater than 0"
+            )
 
         for value in (created_from, created_to):
             if value is not None and (value.tzinfo is None or value.utcoffset() is None): # 시간대 정보 x or 시간대 계산 x인 경우
@@ -277,6 +294,11 @@ class AlertRepository:
         created_to_utc = (
             created_to.astimezone(timezone.utc).isoformat()
             if created_to is not None else None
+        )
+
+        cursor_created_at_utc = (
+            cursor_created_at.astimezone(timezone.utc).isoformat()
+            if cursor_created_at is not None else None
         )
 
         conditions: list[str] = []
@@ -297,6 +319,23 @@ class AlertRepository:
         if created_to_utc is not None:
             conditions.append("created_at < ?")
             values.append(created_to_utc)
+
+        if cursor_created_at_utc is not None and cursor_alert_id is not None:
+            conditions.append(
+                """
+                (
+                    created_at < ? OR (created_at = ? AND alert_id < ?)
+                )
+                """
+            )
+
+            values.extend(
+                [
+                    cursor_created_at_utc,
+                    cursor_created_at_utc,
+                    cursor_alert_id,
+                ]
+            )
 
         where_clause = ""
 
