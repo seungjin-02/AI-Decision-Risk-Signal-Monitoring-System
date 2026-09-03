@@ -277,9 +277,17 @@ def test_search_returns_empty_list_when_database_is_empty(repository):
 
     assert results == []
 
-def test_search_out_of_limit_range_raise_value_error(repository):
-    for invalid_limit in 0, 101:
-        with pytest.raises(ValueError, match="limit must be between 1 and 100"):
+def test_search_allows_pagination_limit(repository):
+    results = repository.search(limit=101)
+
+    assert results == []
+
+def test_search_rejects_limit_outside(repository):
+    for invalid_limit in (0, 102):
+        with pytest.raises(
+            ValueError,
+            match="limit must be between 1 and 101"
+        ):
             repository.search(limit=invalid_limit)
 
 def test_search_applies_limit_and_preserves_alert_details(repository):
@@ -900,7 +908,7 @@ def test_search_combines_level_filter_and_cursor(repository, test_db_path):
                 info_old_saved.alert_id,
             ),
             (
-                "2026-08-20T04:30:00+00:00",
+                "2026-08-20T05:00:00+00:00",
                 critical_saved.alert_id,
             ),
             (

@@ -257,8 +257,8 @@ class AlertRepository:
             cursor_alert_id: int | None = None
     ) -> list[AlertDetail]:
 
-        if not 1 <= limit <= 100:
-            raise ValueError("limit must be between 1 and 100")
+        if not 1 <= limit <= 101:
+            raise ValueError("limit must be between 1 and 101")
 
         if level is not None and level not in {"INFO", "WARN", "CRITICAL"}:
             raise ValueError("level must be INFO, WARN, CRITICAL")
